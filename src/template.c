@@ -186,20 +186,6 @@ static void display_task(void *arg) {
                 message_received=false;
                 upper_state = UPPER_IDLE;
                 break;
-            
-
-            case SEND_MESSAGE:// state machine to trigger send_message has to be done, i havent considered it yet this is just the code.
-                clear_display();
-                write_text("Message from sensor:");
-                vTaskDelay(pdMS_TO_TICKS(5000));  
-                clear_display();
-                write_text(morse_message);
-                vTaskDelay(pdMS_TO_TICKS(10000));
-                clear_display();
-                morse_index = 0;
-                morse_message[0] = '\0';
-                upper_state = UPPER_IDLE;
-                break;  }
 
 
     vTaskDelay(pdMS_TO_TICKS(1000));//change later 
