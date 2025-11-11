@@ -35,18 +35,18 @@ int morse_index = 0;
 static void read_sensor(void *arg) {
     printf("read_sensor started %d\n", lower_state);
     (void) arg;
-    while(1) {
-
     
+    while(1) {
         if (lower_state == WAITING) {
+
             float ax, ay, az, gx, gy, gz, t;
 
             // init_ICM42670();
 
             ICM42670_start_with_default_values();
 
-            ///if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
-            ///{
+            if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
+            {
                 if (az > 0.1) {
                     printf("UP: %.2fg)\n", az); // delete after testing
                     current_morse = '.';
@@ -57,19 +57,12 @@ static void read_sensor(void *arg) {
                 }
                 printf("lower state changed\n");
                 lower_state = WRITE_TO_MEMORY;
-            ///}
+            }
 
-            vTaskDelay(pdMS_TO_TICKS(100)); 
+            vTaskDelay(pdMS_TO_TICKS(1000)); 
         }
     }
 }
-
-git config --local user.email "myemail@gmail.com"
-git config --local user.name "Myname"
-git config --local --list
-
-  git config --global user.email "you@example.com"
-  git config --global user.name "Your Name"
 
 static void read_button() {
     printf("read_button started %d\n", lower_state);
