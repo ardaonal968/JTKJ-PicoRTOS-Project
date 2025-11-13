@@ -179,14 +179,14 @@ static void display_task(void *arg) {
             case (UPPER_PROCESSING):
                 morse_code_light(received_morse_code);
                 clear_display();
-                write_text("Message from workstation:");
+                write_text("received:");
                 vTaskDelay(pdMS_TO_TICKS(300)); 
                 clear_display();
                 write_text(received_morse_code);//see if it works after testing
                 vTaskDelay(pdMS_TO_TICKS(500)); 
 
                 clear_display();
-                write_text("waiting for message");
+                write_text("waiting");
                 message_received=false;
                 upper_state = UPPER_IDLE;
                 break;
