@@ -170,6 +170,7 @@ static void display_task(void *arg) {
 
     clear_display();
     write_text("ready");
+    upper_state = MENU_IDLE;
 
     for(;;){    
         switch (upper_state){
@@ -177,15 +178,19 @@ static void display_task(void *arg) {
 
             case MENU_IDLE:
                 clear_display();
-                write_text("Send a Morse Message\nReceive a Morse Message");
+                write_text_xy(0,0, "1:Send a Message");
+                write_text_xy(0,10, "2:Receive a Message");
+                
 
-                if (BUTTON1) {
+                if (button_pressed_1) {
+                    button_pressed_1=false;
                     upper_state = MENU_SEND;
                     clear_display();
                     write_text("Send Mode");
                     write_text(morse_message); 
                 }
-                else if (BUTTON2) {
+                else if (button_pressed_2) {
+                    button_pressed_2=false;
                     upper_state = MENU_RECEIVE; 
                     clear_display();
                     write_text("Receive Mode");
@@ -194,6 +199,13 @@ static void display_task(void *arg) {
                 break;
 
             case MENU_SEND://ADD THE SEND FUNCTIONALITY HERE
+                write_text("send mode!");
+
+                if (button_pressed_1){
+                    button_pressed_1=false;
+                    upper_state=MENU_IDLE;
+                }
+                break;
                 
             case MENU_RECEIVE:
                 if (message_received) {
