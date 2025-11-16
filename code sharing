@@ -15,8 +15,8 @@
 #define DEFAULT_STACK_SIZE 2048 
 
 //Add here necessary states
-enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5};
-
+enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5, MENU_IDLE, MENU_SEND, MENU_RECEIVE};
+enum state menu_state= MENU_IDLE;
 enum state lower_state = WAITING;
 enum state upper_state = UPPER_IDLE;
 char received_morse_code[256] = {0};//buffer to store 
@@ -114,7 +114,6 @@ void tud_cdc_rx_cb(uint8_t itf){
 
 static void usbTask(void *arg) {
     (void)arg;
-    printf("usbtask initial\n");  
     while (1) {
         //printf("usbtask looping\n");
         tud_task();              // With FreeRTOS, wait for events
@@ -146,10 +145,10 @@ void morse_code_light(char* morse_code){//turn received morse into led light int
 
         else if (morse_code[i] == ' ') {
             if (morse_code[i+1] == ' ') {
-                vTaskDelay(pdMS_TO_TICKS(200));}//amount of ticks to indicate space between two words
+                vTaskDelay(pdMS_TO_TICKS(1400));}//amount of ticks to indicate space between two words
              
         
-            else {vTaskDelay(pdMS_TO_TICKS(200));} //amount of ticks to indicate its a space
+            else {vTaskDelay(pdMS_TO_TICKS(600));} //amount of ticks to indicate a gap between letters
         }              
                 
                 
@@ -176,6 +175,8 @@ static void display_task(void *arg) {
                 break;
 
             
+
+            
             case (UPPER_PROCESSING):
                 morse_code_light(received_morse_code);
                 clear_display();
@@ -194,6 +195,24 @@ static void display_task(void *arg) {
 
 
     vTaskDelay(pdMS_TO_TICKS(100));//change later 
+    }
+}
+
+static void menu_task(void *arg){
+    (void)arg;
+    switch(menu_state){
+
+        case MENU_IDLE:
+
+
+
+
+        case MENU_RECEIVE:
+
+
+
+        case MENU_SEND:
+
     }
 }
 
