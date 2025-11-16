@@ -15,12 +15,16 @@
 #define DEFAULT_STACK_SIZE 2048 
 
 //Add here necessary states
-enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5};
+enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5, MENU_IDLE, MENU_SEND, MENU_RECEIVE};
 
+
+enum state menu_state= MENU_IDLE;
 enum state lower_state = WAITING;
 enum state upper_state = UPPER_IDLE;
 char received_morse_code[256] = {0};//buffer to store 
 bool message_received = false;
+static volatile uint8_t button_pressed_1, button_pressed_2, ignore_buttons=false;
+
 
 
 
@@ -32,53 +36,105 @@ char morse_message[257];
 
 int morse_index = 0;
 
+int measrement_device_index = 1;
+
+int16_t sample_buffer[MEMS_BUFFER_SIZE];
+int16_t temp_sample_buffer[MEMS_BUFFER_SIZE];//use to have two different buffers.z
+volatile int samples_read = 0;
+
+static void on_sound_buffer_ready(){
+    samples_read = get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
+}
+
+static void read_mic() {
+    if (init_microphone_sampling()<0){
+        sleep_ms(500);
+        printf("Cannot start sampling the microphone\n");
+    
+    end_microphone_sampling();
+    get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
+    for (int i = 0; i < sample_count; i++) {
+        printf("%d\n", temp_sample_buffer[i]);
+        sent_bytes += sizeof(temp_sample_buffer[0]);
+    }
+    }
+}
+
+static void read_accelerometer() {
+    float ax, ay, az, gx, gy, gz, t;
+
+    if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
+    {
+        if (az > 0.1) {
+            printf("UP: %.2fg)\n", az); // delete after testing
+            current_morse = '.';
+        }
+        else if (az < -0.1) {
+            printf("DOWN: %.2fg)\n", az); // delete after testing
+            current_morse = '-';
+        }
+        
+    }
+}
+
+
+
+
 static void read_sensor(void *arg) {
     printf("read_sensor started %d\n", lower_state);
     (void) arg;
     
     while(1) {
         if (lower_state == WAITING) {
-
-            float ax, ay, az, gx, gy, gz, t;
-
-            // init_ICM42670();
-
-            ICM42670_start_with_default_values();
-
-            if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
-            {
-                if (az > 0.1) {
-                    printf("UP: %.2fg)\n", az); // delete after testing
-                    current_morse = '.';
-                }
-                else if (az < -0.1) {
-                    printf("DOWN: %.2fg)\n", az); // delete after testing
-                    current_morse = '-';
-                }
-                printf("lower state changed\n");
-                lower_state = WRITE_TO_MEMORY;
+            switch (measrement_device_index) {
+                case 1:
+                    read_accelerometer();
+                    break;
+                case 2:
+                    read_mic();
+                    break;
+        
+        printf("lower state changed\n");
+        lower_state = WRITE_TO_MEMORY;
+                
+        vTaskDelay(pdMS_TO_TICKS(1000)); 
             }
-
-            vTaskDelay(pdMS_TO_TICKS(1000)); 
         }
     }
 }
 
-static void read_button() {
+
+
+
+
+
+
+
+static void read_button(void *arg) {
     printf("read_button started %d\n", lower_state);
+    (void) arg;
     while (1) {
         if (lower_state == WRITE_TO_MEMORY) {
             printf("passed state check \n");
-            if (current_morse != '\0' && morse_index < 257) 
-            {
-                morse_message[morse_index++] = current_morse;
-                morse_message[morse_index] = '\0'; /// keep string terminated
-                printf("Stored: %c | Buffer: %s\n", current_morse, morse_message); /// only for testing
+            if (BUTTON1 != 0){   /// Writes the character to the message, if character is valid
+                if (current_morse != '\0' && morse_index < 257) 
+                {
+                    morse_message[morse_index++] = current_morse;
+                    morse_message[morse_index] = '\0'; /// 
+                    printf("Stored: %c | Entire message: %s\n", current_morse, morse_message); /// only for testing
+                }
             }
-
+            else if (BUTTON2 != 0)
+            {
+                morse_message[morse_index++] = " ";
+                morse_message[morse_index] = '\0'; /// 
+                printf("Stored: %c | Entire message: %s\n", current_morse, morse_message); /// only for testing               
+            }
+            
+                
             current_morse = '\0';
             lower_state = WAITING;  /// Ready for next motion
-
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 
@@ -130,94 +186,122 @@ void morse_code_light(char* morse_code){//turn received morse into led light int
 
         if (morse_code[i] == '.') {
             set_led_status(true);
-            vTaskDelay(pdMS_TO_TICKS(100));//amount of ticks to indicate its a dot
+            vTaskDelay(pdMS_TO_TICKS(200));//amount of ticks to indicate its a dot
             set_led_status(false);
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(pdMS_TO_TICKS(200));
         } 
 
         else if (morse_code[i] == '-') { 
             set_led_status(true);
-            vTaskDelay(pdMS_TO_TICKS(100));//amount of ticks to indicate its a dash
+            vTaskDelay(pdMS_TO_TICKS(600));//amount of ticks to indicate its a dash
             set_led_status(false);
-            vTaskDelay(pdMS_TO_TICKS(100)); 
+            vTaskDelay(pdMS_TO_TICKS(200)); 
         }
 
         else if (morse_code[i] == ' ') {
             if (morse_code[i+1] == ' ') {
-                vTaskDelay(pdMS_TO_TICKS(100));}//amount of ticks to indicate space between two words
+                vTaskDelay(pdMS_TO_TICKS(1400));}//amount of ticks to indicate space between two words
              
         
-            else {vTaskDelay(pdMS_TO_TICKS(100));} //amount of ticks to indicate its a space
+            else {vTaskDelay(pdMS_TO_TICKS(600));} //amount of ticks to indicate its a space
         }              
                 
                 
         //NOTES; kind of confused on how to differentiate spaces and the inherent timing between dots and dashes
     }}
 
+static void btn_fxn(uint gpio, uint32_t eventMask) {
+    if (gpio  == BUTTON1)
+        button_pressed_1 = true;
+    else if (gpio == BUTTON2)
+        button_pressed_2 = true;}
+    
 
 static void display_task(void *arg) {
     (void)arg;
-    
+
     init_display();
     init_led();
     set_led_status(false);
 
-    clear_display();
-    write_text("ready");
+    upper_state = MENU_IDLE;
+    enum state last_state = 0;
 
-    for(;;){    
-        switch (upper_state){
+    for (;;) {
 
-            case UPPER_IDLE:
-                if (message_received){
-                    upper_state = UPPER_PROCESSING;}
-                break;
+    switch (upper_state) {
 
-            
-            case (UPPER_PROCESSING):
-                clear_display();
-                write_text("Message from workstation:");
-                vTaskDelay(pdMS_TO_TICKS(3000)); 
-                clear_display();
-                write_text(received_morse_code);//see if it works after testing
-                vTaskDelay(pdMS_TO_TICKS(5000)); 
-                morse_code_light(received_morse_code);//sse if it works after testing
-                vTaskDelay(pdMS_TO_TICKS(10000));  
+        case MENU_IDLE:
+            if (button_pressed_1) {
+                button_pressed_1 = 0;
+                upper_state = MENU_SEND;
+            }
+            else if (button_pressed_2) {
+                button_pressed_2 = 0;
+                upper_state = MENU_RECEIVE;
+            }
+            break;
 
-                clear_display();
-                write_text("waiting for message");
-                message_received=false;
-                upper_state = UPPER_IDLE;
-                break;
-            
+        case MENU_SEND:
+            if (button_pressed_2) {
+                button_pressed_2 = 0;
+                button_pressed_1 = 0;
+                upper_state = MENU_IDLE;
+            }
+            break;
 
-            case SEND_MESSAGE:// state machine to trigger send_message has to be done, i havent considered it yet this is just the code.
-                clear_display();
-                write_text("Message from sensor:");
-                vTaskDelay(pdMS_TO_TICKS(5000));  
-                clear_display();
-                write_text(morse_message);
-                vTaskDelay(pdMS_TO_TICKS(10000));
-                clear_display();
-                morse_index = 0;
-                morse_message[0] = '\0';
-                upper_state = UPPER_IDLE;
-                break;  }
+        case MENU_RECEIVE:
+            if (message_received) {
+                upper_state = UPPER_PROCESSING;
+            }
+            else if (button_pressed_2) {
+                button_pressed_2 = 0;
+                upper_state = MENU_IDLE;
+            }
+            break;
 
-
-    vTaskDelay(pdMS_TO_TICKS(1000));//change later 
+        case UPPER_PROCESSING:
+            morse_code_light(received_morse_code);
+            clear_display();
+            write_text_xy(0,0,"received:");
+            vTaskDelay(pdMS_TO_TICKS(300));
+            clear_display();
+            write_text_xy(0,10,received_morse_code);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            clear_display();
+            write_text("waiting");
+            message_received = false;
+            upper_state = MENU_RECEIVE;
+            break;
     }
+
+    if (upper_state != last_state) {
+        clear_display();
+        switch (upper_state) {
+            case MENU_IDLE:
+                write_text_xy(0,0, "1:Send a Message");
+                write_text_xy(0,10,"2:Receive a Message");
+                break;
+            case MENU_SEND:
+                write_text_xy(0,0,"Send Mode");
+                write_text_xy(0,10,morse_message);
+                write_text_xy(0,20,"Press 2 to go back");
+                break;
+            case MENU_RECEIVE:
+                write_text_xy(0,0,"Receive Mode");
+                write_text_xy(0,10,"Press 2 to go back");
+                break;
+            case UPPER_PROCESSING:
+                write_text_xy(0,0,"Processing...");
+                break;
+        }
+        last_state = upper_state;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(50));
+}
 }
 
-
-static void example_task(void *arg){
-    (void)arg;
-
-    for(;;){
-        tight_loop_contents(); // Modify with application code here.
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
-}
 
 int main() {
     stdio_init_all();
@@ -225,10 +309,15 @@ int main() {
     while (!stdio_usb_connected()){
         sleep_ms(10);
     } 
-    
+    /// start all components being used
+    ICM42670_start_with_default_values();
+    pdm_microphone_set_callback(on_sound_buffer_ready)
+
     printf("first print worked");
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
+    gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
+    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
     printf("init successful");
     TaskHandle_t sensorTask, buttonTask, displayTask, hUsb = NULL;
     
