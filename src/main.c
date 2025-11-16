@@ -92,7 +92,7 @@ static void read_sensor(void *arg) {
                     break;
                 case 2:
                     read_mic();
-                    break;
+                    break;}
         
         printf("lower state changed\n");
         lower_state = WRITE_TO_MEMORY;
@@ -101,7 +101,7 @@ static void read_sensor(void *arg) {
             }
         }
     }
-}
+
 
 
 
@@ -126,7 +126,7 @@ static void read_button(void *arg) {
             }
             else if (BUTTON2 != 0)
             {
-                morse_message[morse_index++] = " ";
+                //morse_message[morse_index++] = " ";
                 morse_message[morse_index] = '\0'; /// 
                 printf("Stored: %c | Entire message: %s\n", current_morse, morse_message); /// only for testing               
             }
@@ -311,7 +311,7 @@ int main() {
     } 
     /// start all components being used
     ICM42670_start_with_default_values();
-    pdm_microphone_set_callback(on_sound_buffer_ready)
+    pdm_microphone_set_callback(on_sound_buffer_ready);
 
     printf("first print worked");
     init_hat_sdk();
