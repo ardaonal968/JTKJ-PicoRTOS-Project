@@ -64,7 +64,8 @@ static void read_sensor(void *arg) {
     }
 }
 
-static void read_button() {
+static void read_button(void *arg) {
+    (void)arg;
     //printf("read_button started %d\n", lower_state);
     while (1) {
         if (lower_state == WRITE_TO_MEMORY) {
@@ -185,14 +186,12 @@ static void display_task(void *arg) {
                 if (button_pressed_1) {
                     button_pressed_1=false;
                     upper_state = MENU_SEND;
-                    clear_display();
                     write_text_xy(0,0,"Send Mode");
                     write_text(morse_message); 
                 }
                 else if (button_pressed_2) {
                     button_pressed_2=false;
                     upper_state = MENU_RECEIVE; 
-                    clear_display();
                     write_text_xy(0,0,"Receive Mode");
                 }
                 break;
@@ -211,7 +210,7 @@ static void display_task(void *arg) {
                     upper_state = UPPER_PROCESSING;
                 }
                 
-                if (button_pressed_1) {
+                else if (button_pressed_1) {
                     button_pressed_1 = false;
                     upper_state = MENU_IDLE;
                 }
@@ -229,6 +228,7 @@ static void display_task(void *arg) {
 
                 clear_display();
                 write_text("waiting");
+                button_pressed_1=false;
                 message_received=false;
                 upper_state = MENU_RECEIVE;
                 break;
