@@ -21,7 +21,7 @@ enum state lower_state = WAITING;
 enum state upper_state = UPPER_IDLE;
 char received_morse_code[256] = {0};//buffer to store 
 bool message_received = false;
-
+static volatile uint8_t button_pressed_1, button_pressed_2;
 
 
 
@@ -155,9 +155,9 @@ void morse_code_light(char* morse_code){//turn received morse into led light int
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     if (gpio  == BUTTON1)
-        button_press_1 = true;
+        button_pressed_1 = true;
     else if (gpio == BUTTON2)
-        button_press_2 = true;}
+        button_pressed_2 = true;}
 
 
 
@@ -200,9 +200,9 @@ static void display_task(void *arg) {
                     upper_state = UPPER_PROCESSING;
                 }
                 
-                if (button_press_1) {
-                    button_press_1 = false;
-                    upper_state = MENU_MAIN;
+                if (button_pressed_1) {
+                    button_pressed_1 = false;
+                    upper_state = MENU_IDLE;
                 }
                 break;
 
@@ -247,6 +247,8 @@ int main() {
     printf("first print worked");
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
+    gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
+    gpio_set_irq_enabled(BUTTON2, GPIO_IRQ_EDGE_RISE, true);
     printf("init successful");
     TaskHandle_t sensorTask, buttonTask, displayTask, hUsb = NULL;
     
