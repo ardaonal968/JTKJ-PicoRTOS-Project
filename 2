@@ -1,0 +1,303 @@
+
+#include <stdio.h>
+#include <string.h>
+
+#include <pico/stdlib.h>
+
+#include <FreeRTOS.h>
+#include <queue.h>
+#include <task.h>
+
+#include "tkjhat/sdk.h"
+#include "tusb.h"//the library used to create a serial port over USB, according to part 5 
+
+// Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
+#define DEFAULT_STACK_SIZE 2048 
+
+//Add here necessary states
+enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5, MENU_IDLE, MENU_SEND, MENU_RECEIVE};
+enum state menu_state= MENU_IDLE;
+enum state lower_state = WAITING;
+enum state upper_state = UPPER_IDLE;
+char received_morse_code[256] = {0};//buffer to store 
+bool message_received = false;
+
+
+
+
+
+char current_morse;
+
+char morse_message[257];
+
+int morse_index = 0;
+
+static void read_sensor(void *arg) {
+    //printf("read_sensor started %d\n", lower_state);
+    (void) arg;
+    
+    while(1) {
+        if (lower_state == WAITING) {
+
+            float ax, ay, az, gx, gy, gz, t;
+
+            // init_ICM42670();
+
+            ICM42670_start_with_default_values();
+
+            if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
+            {
+                if (az > 0.1) {
+                    printf("UP: %.2fg)\n", az); // delete after testing
+                    current_morse = '.';
+                }
+                else if (az < -0.1) {
+                    printf("DOWN: %.2fg)\n", az); // delete after testing
+                    current_morse = '-';
+                }
+                //printf("lower state changed\n");
+                lower_state = WRITE_TO_MEMORY;
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(1000)); 
+        }
+    }
+}
+
+static void read_button() {
+    //printf("read_button started %d\n", lower_state);
+    while (1) {
+        if (lower_state == WRITE_TO_MEMORY) {
+            //printf("passed state check \n");
+            if (current_morse != '\0' && morse_index < 257) 
+            {
+                morse_message[morse_index++] = current_morse;
+                morse_message[morse_index] = '\0'; /// keep string terminated
+                printf("Stored: %c | Buffer: %s\n", current_morse, morse_message); /// only for testing
+            }
+
+            current_morse = '\0';
+            lower_state = WAITING;  /// Ready for next motion
+
+        }
+    }
+
+}
+
+
+
+
+void tud_cdc_rx_cb(uint8_t itf){
+
+    // allocate buffer for the data on the stack    
+    uint8_t buf[CFG_TUD_CDC_RX_BUFSIZE + 1];
+
+    uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf));// reads data from USB into buf. You’ll then process that data as needed. 
+
+    if (itf == 0) {//add the data to received_morse_code
+        for (int i = 0; i < count && i < sizeof(received_morse_code)-1; i++) {
+            received_morse_code[i] = buf[i];}
+        
+        if (count < sizeof(received_morse_code)) {//terminate c string
+            received_morse_code[count] = '\0';} 
+
+        message_received = true;
+ 
+        tud_cdc_n_write(itf, (uint8_t const *) "OK\n", 3); //be gentle and send an ok back
+        tud_cdc_n_write_flush(itf);
+    }
+
+    // Optional: if you need a C-string, you can terminate it:
+    // if (count < sizeof(buf)) buf[count] = '\0';
+}
+
+
+static void usbTask(void *arg) {
+    (void)arg;
+    while (1) {
+        //printf("usbtask looping\n");
+        tud_task();              // With FreeRTOS, wait for events
+                                 // Do not add vTaskDelay.
+    }
+}
+
+
+void morse_code_light(char* morse_code){//turn received morse into led light intervals
+
+    for (int i=0; morse_code[i] !='\n' && morse_code[i] !='\0';i++){
+        //message ends with two spaces and new line(\n) according to the doc so it should recognize it?
+        if (morse_code[i] == ' ' && morse_code[i+1] == ' ' && morse_code[i+2] == '\n') {break;}
+
+
+        if (morse_code[i] == '.') {
+            set_led_status(true);
+            vTaskDelay(pdMS_TO_TICKS(200));//amount of ticks to indicate its a dot
+            set_led_status(false);
+            vTaskDelay(pdMS_TO_TICKS(200));
+        } 
+
+        else if (morse_code[i] == '-') { 
+            set_led_status(true);
+            vTaskDelay(pdMS_TO_TICKS(600));//amount of ticks to indicate its a dash
+            set_led_status(false);
+            vTaskDelay(pdMS_TO_TICKS(200)); 
+        }
+
+        else if (morse_code[i] == ' ') {
+            if (morse_code[i+1] == ' ') {
+                vTaskDelay(pdMS_TO_TICKS(1400));}//amount of ticks to indicate space between two words
+             
+        
+            else {vTaskDelay(pdMS_TO_TICKS(600));} //amount of ticks to indicate a gap between letters
+        }              
+    }
+}
+
+static void btn_fxn(uint gpio, uint32_t eventMask) {
+    if (gpio == BUTTON1) button_press_1 = true;
+    else if (gpio == BUTTON2) button_press_2 = true;}
+
+static void display_task(void *arg) {
+    (void)arg;
+    
+    init_display();
+    init_led();
+    set_led_status(false);
+
+    clear_display();
+    write_text("ready");
+
+    for(;;){    
+        switch (upper_state){
+
+
+            case MENU_IDLE:
+                clear_display();
+                write_text("Send a Morse Message\nReceive a Morse Message");
+
+                if (BUTTON1) {
+                    upper_state = MENU_SEND;
+                    clear_display();
+                    write_text("Send Mode");
+                    write_text(morse_message); 
+                }
+                else if (BUTTON2) {
+                    upper_state = MENU_RECEIVE; 
+                    clear_display();
+                    write_text("Receive Mode");
+                    write_text("Waiting...");
+                }
+                break;
+
+            case MENU_SEND:
+                
+            case MENU_RECEIVE:
+                if (message_received) {
+                    upper_state = UPPER_PROCESSING;
+                }
+                
+                if (button1_pressed) {
+                    button1_pressed = false;
+                    upper_state = MENU_MAIN;
+                }
+                break;
+
+            
+
+            
+            case (UPPER_PROCESSING):
+                morse_code_light(received_morse_code);
+                clear_display();
+                write_text("received:");
+                vTaskDelay(pdMS_TO_TICKS(300)); 
+                clear_display();
+                write_text(received_morse_code);//see if it works after testing
+                vTaskDelay(pdMS_TO_TICKS(500)); 
+
+                clear_display();
+                write_text("waiting");
+                message_received=false;
+                upper_state = UPPER_IDLE;
+                break;
+            }
+
+
+    vTaskDelay(pdMS_TO_TICKS(100));//change later 
+    }
+}
+
+static void example_task(void *arg){
+    (void)arg;
+
+    for(;;){
+        tight_loop_contents(); // Modify with application code here.
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+}
+
+int main() {
+    stdio_init_all();
+    // Uncomment this lines if you want to wait till the serial monitor is connected
+    while (!stdio_usb_connected()){
+        sleep_ms(10);
+    } 
+    
+    printf("first print worked");
+    init_hat_sdk();
+    sleep_ms(300); //Wait some time so initialization of USB and hat is done.
+    printf("init successful");
+    TaskHandle_t sensorTask, buttonTask, displayTask, hUsb = NULL;
+    
+
+    // Create the tasks with xTaskCreate
+    //BaseType_t result = xTaskCreate(example_task,       // (en) Task function
+    //            "example",              // (en) Name of the task 
+    //            DEFAULT_STACK_SIZE, // (en) Size of the stack for this task (in words). Generally 1024 or 2048
+    //            NULL,               // (en) Arguments of the task 
+    //            2,                  // (en) Priority of this task
+    //            &myExampleTask);    // (en) A handle to control the execution of this task
+
+    // Create the sensor task
+    BaseType_t result = xTaskCreate(read_sensor, "read_sensor", DEFAULT_STACK_SIZE, NULL, 2, &sensorTask);
+    if (result != pdPASS) {
+        printf("Sensor Task creation failed\n");
+        return 0;
+    }
+    printf("readsensor");
+    // Create the button task
+    result = xTaskCreate(read_button, "read_button", DEFAULT_STACK_SIZE, NULL, 2, &buttonTask);
+    if (result != pdPASS) {
+        printf("Button Task creation failed\n");
+        return 0;
+    }
+    printf("readbutton");
+
+
+
+    // Create the display task
+    result = xTaskCreate(display_task, "display_task", DEFAULT_STACK_SIZE, NULL, 3, &displayTask);             
+    
+    if (result != pdPASS) {
+        printf("Display Task creation failed\n");
+        return 0;
+    }
+
+    // Create the usb task
+    result = xTaskCreate(usbTask, "usb_task", DEFAULT_STACK_SIZE, NULL, 4, &hUsb);//priority 3
+
+    if (result != pdPASS) {
+        printf("usb task creation failed\n");
+        return 0;
+    }
+
+
+    // Start the scheduler
+    tusb_init();
+    vTaskStartScheduler();
+
+    while (1){
+        printf("failed :(");
+    }
+    // Never reach this line
+    return 0;
+}
