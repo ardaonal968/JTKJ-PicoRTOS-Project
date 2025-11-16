@@ -150,10 +150,15 @@ void morse_code_light(char* morse_code){//turn received morse into led light int
         
             else {vTaskDelay(pdMS_TO_TICKS(600));} //amount of ticks to indicate a gap between letters
         }              
-                
-                
-        //NOTES; kind of confused on how to differentiate spaces and the inherent timing between dots and dashes
-    }}
+    }
+}
+
+static void btn_fxn(uint gpio, uint32_t eventMask) {
+    if (gpio  == BUTTON1)
+        button_press_1 = true;
+    else if (gpio == BUTTON2)
+        button_press_2 = true;}
+
 
 
 static void display_task(void *arg) {
@@ -169,12 +174,37 @@ static void display_task(void *arg) {
     for(;;){    
         switch (upper_state){
 
-            case UPPER_IDLE:
-                if (message_received){
-                    upper_state = UPPER_PROCESSING;}
+
+            case MENU_IDLE:
+                clear_display();
+                write_text("Send a Morse Message\nReceive a Morse Message");
+
+                if (BUTTON1) {
+                    upper_state = MENU_SEND;
+                    clear_display();
+                    write_text("Send Mode");
+                    write_text(morse_message); 
+                }
+                else if (BUTTON2) {
+                    upper_state = MENU_RECEIVE; 
+                    clear_display();
+                    write_text("Receive Mode");
+                    write_text("Waiting...");
+                }
                 break;
 
-            
+            case MENU_SEND://ADD THE SEND FUNCTIONALITY HERE
+                
+            case MENU_RECEIVE:
+                if (message_received) {
+                    upper_state = UPPER_PROCESSING;
+                }
+                
+                if (button_press_1) {
+                    button_press_1 = false;
+                    upper_state = MENU_MAIN;
+                }
+                break;
 
             
             case (UPPER_PROCESSING):
@@ -189,7 +219,7 @@ static void display_task(void *arg) {
                 clear_display();
                 write_text("waiting");
                 message_received=false;
-                upper_state = UPPER_IDLE;
+                upper_state = MENU_RECEIVE;
                 break;
             }
 
@@ -197,25 +227,6 @@ static void display_task(void *arg) {
     vTaskDelay(pdMS_TO_TICKS(100));//change later 
     }
 }
-
-static void menu_task(void *arg){
-    (void)arg;
-    switch(menu_state){
-
-        case MENU_IDLE:
-
-
-
-
-        case MENU_RECEIVE:
-
-
-
-        case MENU_SEND:
-
-    }
-}
-
 
 static void example_task(void *arg){
     (void)arg;
