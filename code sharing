@@ -186,21 +186,19 @@ static void display_task(void *arg) {
                     button_pressed_1=false;
                     upper_state = MENU_SEND;
                     clear_display();
-                    write_text("Send Mode");
+                    write_text_xy(0,0,"Send Mode");
                     write_text(morse_message); 
                 }
                 else if (button_pressed_2) {
                     button_pressed_2=false;
                     upper_state = MENU_RECEIVE; 
                     clear_display();
-                    write_text("Receive Mode");
-                    write_text("Waiting...");
+                    write_text_xy(0,0,"Receive Mode");
                 }
                 break;
 
             case MENU_SEND://ADD THE SEND FUNCTIONALITY HERE
-                write_text("send mode!");
-
+                clear_display();
                 if (button_pressed_1){
                     button_pressed_1=false;
                     upper_state=MENU_IDLE;
@@ -208,6 +206,7 @@ static void display_task(void *arg) {
                 break;
                 
             case MENU_RECEIVE:
+            clear_display();
                 if (message_received) {
                     upper_state = UPPER_PROCESSING;
                 }
@@ -260,7 +259,7 @@ int main() {
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
     gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
-    gpio_set_irq_enabled(BUTTON2, GPIO_IRQ_EDGE_RISE, true);
+    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
     printf("init successful");
     TaskHandle_t sensorTask, buttonTask, displayTask, hUsb = NULL;
     
