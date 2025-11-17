@@ -32,7 +32,7 @@ char morse_message[257];
 
 int morse_index = 0;
 
-int measrement_device_index = 1;
+int measurement_device_index = 1;
 
 int16_t sample_buffer[MEMS_BUFFER_SIZE];
 int16_t temp_sample_buffer[MEMS_BUFFER_SIZE];//use to have two different buffers.z
@@ -59,7 +59,7 @@ static void read_mic() {
 
 static void read_accelerometer() {
     float ax, ay, az, gx, gy, gz, t;
-
+    ICM42670_start_with_default_values();
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     {
         if (az > 0.1) {
@@ -74,20 +74,44 @@ static void read_accelerometer() {
     }
 }
 
+
+
+static void read_gyroscope() {
+    float ax, ay, az, gx, gy, gz, t;
+    ICM42670_start_with_default_values();
+    if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
+    {
+        if (gx < 100 && gx > 50) {
+            current_morse = '.';
+        }
+        else if (gx < -50 && gx > -100) {
+            current_morse = '-';
+        }
+        else if (gx < 50 && gx > -50) {
+            current_morse = ' ';
+        }        
+    }
+    printf("gyroscope data %f \n", gx);
+}
+
+
 static void read_sensor(void *arg) {
     printf("read_sensor started %d\n", lower_state);
     (void) arg;
     
     while(1) {
-        if (lower_state == WAITING) {
-            switch (measrement_device_index) {
-                case 1:
-                    read_accelerometer();
-                    break;
-                case 2:
-                    //read_mic();
-                    break;
-        
+        if (lower_state == WAITING && upper_state == MENU_SEND) {
+            switch (measurement_device_index)
+            {
+            case 1:
+                read_gyroscope();
+                break;
+            
+            default:
+                read_accelerometer();
+                break;
+            }
+                       
         printf("lower state changed\n");
         lower_state = WRITE_TO_MEMORY;
                 
@@ -95,7 +119,6 @@ static void read_sensor(void *arg) {
             }
         }
     }
-}
 
 static void read_button(void *arg) {
     printf("read_button started %d\n", lower_state);
@@ -103,16 +126,18 @@ static void read_button(void *arg) {
     while (1) {
         if (lower_state == WRITE_TO_MEMORY) {
             printf("passed state check \n");
-            if (BUTTON1 != 0){   /// Writes the character to the message, if character is valid
+            if (button_pressed_1){   /// Writes the character to the message, if character is valid
+                button_pressed_1 = 0;
                 if (current_morse != '\0' && morse_index < 257) 
                 {
                     morse_message[morse_index++] = current_morse;
                     morse_message[morse_index] = '\0'; /// 
-                    printf("Stored: %c | Entire message: %s\n", current_morse, morse_message); /// only for testing
+                    printf("Stored: %c | Entire message: %s | BUTTON 1 %d nd BUTTON 2 %d\n", current_morse, morse_message, BUTTON1, BUTTON2); /// only for testing
                 }
             }
-            else if (BUTTON2 != 0)
+            else if (button_pressed_2)
             {
+                button_pressed_2 = 0;
                 morse_message[morse_index++] = ' ';
                 morse_message[morse_index] = '\0'; /// 
                 printf("Stored: %c | Entire message: %s\n", current_morse, morse_message); /// only for testing               
@@ -253,16 +278,16 @@ static void display_task(void *arg) {
             write_text_xy(0,0,"received:");
             vTaskDelay(pdMS_TO_TICKS(300));
             clear_display();
+            // if len.received_morse_code > something : write writetext(a), writetext(b)
             write_text_xy(0,10,received_morse_code);
             vTaskDelay(pdMS_TO_TICKS(500));
             clear_display();
-            write_text("waiting");
             message_received = false;
             upper_state = MENU_RECEIVE;
             break;
     }
 
-    if (upper_state != last_state) {
+    if (upper_state != last_state) { // so that screen doesnt flicker
         clear_display();
         switch (upper_state) {
             case MENU_IDLE:
@@ -284,8 +309,15 @@ static void display_task(void *arg) {
         }
         last_state = upper_state;
     }
+    else if (upper_state == MENU_SEND) // screen only updates if we are in MENU_SEND, so that the user can read their message
+    {
+        write_text_xy(0,0,"Send Mode");
+        write_text_xy(0,10,morse_message);
+        write_text_xy(0,20,"Press 2 to go back");
+    }
+    
 
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(100));
 }
 }
 
@@ -304,8 +336,9 @@ int main() {
     while (!stdio_usb_connected()){
         sleep_ms(10);
     } 
+    printf("Start imc");
     /// start all components being used
-    //ICM42670_start_with_default_values();
+    
     //pdm_microphone_set_callback(on_sound_buffer_ready);
 
     printf("first print worked");
