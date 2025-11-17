@@ -53,9 +53,10 @@ static void read_mic() {
     
     end_microphone_sampling();
     get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
+    int sample_count=0;
     for (int i = 0; i < sample_count; i++) {
         printf("%d\n", temp_sample_buffer[i]);
-        sent_bytes += sizeof(temp_sample_buffer[0]);
+        //int sent_bytes += sizeof(temp_sample_buffer[0]);
     }
     }
 }
@@ -126,7 +127,7 @@ static void read_button(void *arg) {
             }
             else if (BUTTON2 != 0)
             {
-                //morse_message[morse_index++] = " ";
+                morse_message[morse_index++] =' ';
                 morse_message[morse_index] = '\0'; /// 
                 printf("Stored: %c | Entire message: %s\n", current_morse, morse_message); /// only for testing               
             }
@@ -334,8 +335,8 @@ int main() {
     BaseType_t result = xTaskCreate(read_sensor, "read_sensor", DEFAULT_STACK_SIZE, NULL, 2, &sensorTask);
     if (result != pdPASS) {
         printf("Sensor Task creation failed\n");
-        return 0;
-    }
+        return 0;}
+    
     printf("readsensor");
     // Create the button task
     result = xTaskCreate(read_button, "read_button", DEFAULT_STACK_SIZE, NULL, 2, &buttonTask);
