@@ -286,23 +286,33 @@ void morse_code_buzzer(char*morse_code){
 }
 
 
-
-
-
-void play_jingle(const uint32_t *notes, uint32_t duration_ms) {
+void play_jingle(const uint32_t *notes, const uint32_t *durations, uint32_t tempo_ms) {
     for (uint32_t i = 0; notes[i] != 0; i++) {
-        buzzer_play_tone(notes[i], duration_ms);
+        uint32_t duration = durations[i] * tempo_ms;
+        buzzer_play_tone(notes[i], duration);
+        vTaskDelay(pdMS_TO_TICKS(60));
     }
 }
-const uint32_t notes[] = {880, 1046, 1175, 1046, 880,880, 1046, 1175, 1046, 880,0 };
 
-play_jingle(notes, 120);   
+const uint32_t megalovania_notes[] = {
+    294, 294, 587, 440, 415, 392, 349,    // D4, D4, D5, A4, GS4, G4, F4
+    294, 349, 392, 262, 262, 262, 262,     // D4, F4, G4, C4, C4, C4, C4
+    587, 440, 415, 392, 349, 294, 349, 392, // D5, A4, GS4, G4, F4, D4, F4, G4
+    247, 247, 587, 440, 415, 392, 349,     // B3, B3, D5, A4, GS4, G4, F4
+    294, 349, 392, 233, 233, 233, 233,     // D4, F4, G4, AS3, AS3, AS3, AS3
+    587, 440, 415, 392, 349, 294, 349, 392, // D5, A4, GS4, G4, F4, D4, F4, G4
+    0  
+};
 
-
-const uint32_t megalovania[] = {659, 659, 0, 523, 659, 0, 784, 0, 392, 0, 523, 0, 392, 0, 330, 0, 523, 0, 392, 0, 330, 0, 659, 0, 659, 0, 659, 0, 523, 659, 0, 784, 0, 392, 0, 0 };
-
-const uint32_t notes[] = {880, 1046, 1175, 1046, 880, 880, 1046, 1175, 1046, 880};
-
+const uint32_t megalovania_durations[] = {
+    125, 125, 250, 250, 125, 250, 250,    // Durations for first line
+    125, 125, 125, 62, 62, 62, 62,        // Durations for second line
+    250, 375, 125, 250, 250, 125, 125, 125, // Durations for third line
+    125, 125, 250, 375, 125, 250, 250,    // Durations for fourth line
+    125, 125, 125, 62, 62, 62, 62,        // Durations for fifth line
+    250, 375, 125, 250, 250, 125, 125, 125, // Durations for sixth line
+    0  
+};
 
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
