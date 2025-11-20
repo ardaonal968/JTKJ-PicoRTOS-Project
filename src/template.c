@@ -286,6 +286,19 @@ void morse_code_buzzer(char*morse_code){
 }
 
 
+
+
+
+void play_jingle(uint32_t notes, uint32_t durations){
+     for (int i = 0; i < count; i++) {
+        buzzer_play_tone(notes[i], durations[i]);
+    }
+}
+
+const uint32_t notes[] = {880, 1046, 1175, 1046, 880, 880, 1046, 1175, 1046, 880};
+
+
+
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     if (gpio  == BUTTON1)
         button_pressed_1 = true;
