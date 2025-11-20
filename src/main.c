@@ -34,7 +34,12 @@ int morse_index = 0;
 
 int measurement_device_index = 1;
 
+float gyroscope_data[30];
+
+int gyroscope_data_index = 0
+
 int16_t sample_buffer[MEMS_BUFFER_SIZE];
+
 int16_t temp_sample_buffer[MEMS_BUFFER_SIZE];//use to have two different buffers.z
 
 volatile int samples_read = 0;
@@ -42,6 +47,8 @@ volatile int samples_read = 0;
 static void on_sound_buffer_ready(){
     samples_read = get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
 }
+
+
 /*
 static void read_mic() {
     if (init_microphone_sampling()<0){
@@ -79,6 +86,11 @@ static void read_accelerometer() {
 static void read_gyroscope() {
     float ax, ay, az, gx, gy, gz, t;
     ICM42670_start_with_default_values();
+    for (size_t i = 0; i < 1; i++)
+    {
+        /* code */
+    }
+    
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     {
         if (gx < 100 && gx > 50) {
@@ -94,6 +106,30 @@ static void read_gyroscope() {
     printf("gyroscope data %f \n", gx);
 }
 
+static void read_gyro_memory() {
+    float ax, ay, az, gx, gy, gz, t;
+    ICM42670_start_with_default_values();
+    float highest_value = 0;
+    if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
+    {
+        gyroscope_data[gyroscope_data_index] = gz;
+        gyroscope_data_index ++;
+        for (int i = 0; i < 30; i++)
+        {
+            if (gyroscope_data[i] highest_value){
+                highest_value = gyroscope_data[i]
+            }
+            
+        }
+         
+        if (gyroscope_data_index => 29)
+        {
+            gyroscope_data_index = 0
+        }
+        
+    }
+    return highest_value
+}
 
 static void read_sensor(void *arg) {
     printf("read_sensor started %d\n", lower_state);
@@ -115,7 +151,7 @@ static void read_sensor(void *arg) {
         printf("lower state changed\n");
         lower_state = WRITE_TO_MEMORY;
                 
-        vTaskDelay(pdMS_TO_TICKS(1000)); 
+        vTaskDelay(pdMS_TO_TICKS(100)); 
             }
         }
     }
