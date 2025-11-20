@@ -289,11 +289,16 @@ void morse_code_buzzer(char*morse_code){
 
 
 
-void play_jingle(uint32_t notes, uint32_t durations){
-     for (int i = 0; i < count; i++) {
-        buzzer_play_tone(notes[i], durations[i]);
+void play_jingle(const uint32_t *notes, uint32_t duration_ms) {
+    for (uint32_t i = 0; notes[i] != 0; i++) {
+        buzzer_play_tone(notes[i], duration_ms);
     }
 }
+const uint32_t notes[] = {880, 1046, 1175, 1046, 880,880, 1046, 1175, 1046, 880,0 };
+
+play_jingle(notes, 120);   
+
+
 
 const uint32_t notes[] = {880, 1046, 1175, 1046, 880, 880, 1046, 1175, 1046, 880};
 
