@@ -46,7 +46,6 @@ static void on_sound_buffer_ready(){
 
 static void read_accelerometer() {
     float ax, ay, az, gx, gy, gz, t;
-    ICM42670_start_with_default_values();
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     {
         if (ax > 0.1) {
@@ -94,7 +93,6 @@ const uint32_t megalovania_durations[] = {125, 125, 250, 250, 125, 250, 250,125,
 
 float read_gyro_memory() {
     float ax, ay, az, gx, gy, gz, t;
-    ICM42670_start_with_default_values();
     float highest_value = 0;
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     {
@@ -140,7 +138,6 @@ static void read_gyroscope() {
 
 static void read_orientation() {
     float ax, ay, az, gx, gy, gz, t;
-    ICM42670_start_with_default_values();
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     { 
         printf("ax: %f ay: %f az: %f others: %f %f %f\n", ax, ay, az,gx,gy,t);
@@ -183,8 +180,8 @@ static void read_sensor(void *arg) {
         printf("lower state changed\n");
         lower_state = WRITE_TO_MEMORY;
                 
-        vTaskDelay(pdMS_TO_TICKS(1)); 
             }
+        vTaskDelay(pdMS_TO_TICKS(5));   
         }
     }
 
@@ -200,7 +197,7 @@ static void read_button(void *arg) {
                 {
                     morse_message[morse_index++] = current_morse;
                     morse_message[morse_index] = '\0'; /// 
-                    printf("Stored: %c | Entire message: %s | BUTTON 1 %d nd BUTTON 2 %d\n", current_morse, morse_message, BUTTON1, BUTTON2); /// only for testing
+                    printf("Stored: %c | Entire message: %s | BUTTON 1 %d and BUTTON 2 %d\n", current_morse, morse_message, BUTTON1, BUTTON2);
                 }
             }
             else if (button_pressed_2)
@@ -214,7 +211,7 @@ static void read_button(void *arg) {
                 
             current_morse = '\0';
             lower_state = WAITING;  /// Ready for next motion
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(500));
         }
     }
 
@@ -289,6 +286,8 @@ void morse_code_light(char* morse_code){//turn received morse into led light int
     }
 }
 
+
+
 void morse_code_buzzer(char*morse_code){//turn received more code into buzzer sounds
     init_buzzer();
 
@@ -316,11 +315,6 @@ void morse_code_buzzer(char*morse_code){//turn received more code into buzzer so
         }              
     }
 }
-
-#define dot;
-#define dash;
-#define word_gap;
-#define letter_gap;
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     if (gpio  == BUTTON1)
@@ -357,10 +351,20 @@ static void display_task(void *arg) {
 
         case MENU_SEND:
             if (button_pressed_2) {
-                //play_jingle(megalovania_notes,megalovania_durations);
                 button_pressed_2 = 0;
                 button_pressed_1 = 0;
+                strcat(morse_message, "  \n");
+
+                tud_cdc_n_write(0, (uint8_t const *)morse_message, strlen(morse_message));
+                tud_cdc_n_write_flush(0);
+
                 memset(morse_message,0,strlen(morse_message)); // taken from https://stackoverflow.com/questions/8107826/proper-way-to-empty-a-c-string, clears the string when we return to menu
+
+                morse_index = 0;
+                current_morse = '\0';
+                lower_state = WAITING;
+                button_pressed_1 = 0;
+                button_pressed_2 = 0;
                 upper_state = MENU_IDLE;
             }
             break;
@@ -373,7 +377,7 @@ static void display_task(void *arg) {
             {   
                 clear_display();
                 vTaskDelay(pdMS_TO_TICKS(100));
-                write_text_xy(0,0,"too long XD");
+                write_text_xy(0,0,"Message too long!");
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 message_received = false;
                 upper_state = MENU_IDLE;
@@ -456,10 +460,10 @@ int main() {
     printf("first print worked");
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
+    ICM42670_start_with_default_values();
 
-
-    gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
-    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
+    gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
+    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
     printf("init successful");
     TaskHandle_t sensorTask, buttonTask, displayTask, hUsb = NULL;
     
@@ -498,7 +502,7 @@ int main() {
     }
 
     // Create the usb task
-    result = xTaskCreate(usbTask, "usb_task", DEFAULT_STACK_SIZE, NULL, 4, &hUsb);//priority 3
+    result = xTaskCreate(usbTask, "usb_task", DEFAULT_STACK_SIZE, NULL, 3, &hUsb);//priority 3
 
     if (result != pdPASS) {
         printf("usb task creation failed\n");
