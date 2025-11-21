@@ -138,7 +138,7 @@ const uint32_t megalovania_durations[] = {125, 125, 250, 250, 125, 250, 250,125,
 
 
 
-/// NOT YET FULLY WORKING, PROTOTYPE BELOW
+/* NOT YET FULLY WORKING, PROTOTYPE BELOW
 
 float read_gyro_memory() {
     float ax, ay, az, gx, gy, gz, t;
@@ -184,7 +184,7 @@ static void read_gyroscope() {
     
     printf("gyroscope data %f \n", gx_highest);
 }
-
+*/
 static void read_orientation() {
     float ax, ay, az, gx, gy, gz, t;
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
@@ -363,6 +363,7 @@ void morse_code_buzzer(char*morse_code){//turn received more code into buzzer so
 }
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
+    
     if (gpio  == BUTTON1)
         button_pressed_1 = true;
     else if (gpio == BUTTON2)
@@ -385,6 +386,7 @@ static void display_task(void *arg) {
     switch (upper_state) {
 
         case MENU_IDLE:
+
             if (button_pressed_1) {
                 button_pressed_1 = 0;
                 upper_state = MENU_SEND_DEVICE_SELECT;
@@ -397,8 +399,6 @@ static void display_task(void *arg) {
 
         case MENU_SEND:
             if (button_pressed_2) {
-                button_pressed_2 = 0;
-                button_pressed_1 = 0;
                 strcat(morse_message, "  \n");
 
                 tud_cdc_n_write(0, (uint8_t const *)morse_message, strlen(morse_message));
@@ -415,23 +415,19 @@ static void display_task(void *arg) {
             break;
         
         case MENU_SEND_DEVICE_SELECT:
-            button_pressed_1 = 0;
-            button_pressed_2 = 0; 
+
             if (button_pressed_1) {
                 measurement_device_index = 1;
-                button_pressed_1 = 0;
-                button_pressed_2 = 0;
                 upper_state = MENU_SEND;}   
             
             else if (button_pressed_2) { 
                 measurement_device_index = 2;
-                button_pressed_2 = 0;
-                button_pressed_1 = 0;
                 upper_state = MENU_SEND; }
 
         break;
 
         case MENU_RECEIVE:
+
             if (message_received && strlen(received_morse_code) <=25) {
                 upper_state = UPPER_PROCESSING;
             }
@@ -447,7 +443,6 @@ static void display_task(void *arg) {
             
             else if (button_pressed_2) {
                 //play_jingle(megalovania_notes,megalovania_durations);
-                button_pressed_2 = 0;
                 upper_state = MENU_IDLE;
             }
             break;
@@ -470,6 +465,8 @@ static void display_task(void *arg) {
     }
 
     if (upper_state != last_state) { // so that screen doesnt flicker
+        button_pressed_1 = 0;
+        button_pressed_2 = 0;
         clear_display();
         switch (upper_state) {
             case MENU_IDLE:
@@ -478,6 +475,7 @@ static void display_task(void *arg) {
                 play_jingle(megalovania_notes,megalovania_durations);
                 break;
             case MENU_SEND:
+                
                 write_text_xy(0,0,"Send Mode");
                 write_text_xy(0,10,morse_message);
                 write_text_xy(0,20,"Press 2 to go back");
