@@ -10,7 +10,7 @@
 
 #include "tkjhat/sdk.h"
 #include "tusb.h"//the library used to create a serial port over USB, according to part 5 
-
+#include <math.h>
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
 #define DEFAULT_STACK_SIZE 2048 
 
@@ -27,16 +27,11 @@ static volatile uint8_t button_pressed_1, button_pressed_2, ignore_buttons=false
 
 
 char current_morse;
-
 char morse_message[257];
-
 int morse_index = 0;
-
-int measurement_device_index = 1;
-
-float gyroscope_data[30];
-
-int gyroscope_data_index = 0
+int measurement_device_index = 2;
+float gyroscope_data[10];
+int gyroscope_data_index = 0;
 
 int16_t sample_buffer[MEMS_BUFFER_SIZE];
 
@@ -49,32 +44,17 @@ static void on_sound_buffer_ready(){
 }
 
 
-/*
-static void read_mic() {
-    if (init_microphone_sampling()<0){
-        sleep_ms(500);
-        printf("Cannot start sampling the microphone\n");
-    
-    end_microphone_sampling();
-    get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
-    for (int i = 0; i < sample_count; i++) {
-        printf("%d\n", temp_sample_buffer[i]);
-        sent_bytes += sizeof(temp_sample_buffer[0]);
-    }
-    }
-}*/
-
 static void read_accelerometer() {
     float ax, ay, az, gx, gy, gz, t;
     ICM42670_start_with_default_values();
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     {
-        if (az > 0.1) {
-            printf("UP: %.2fg)\n", az); // delete after testing
+        if (ax > 0.1) {
+            printf("UP: %.2fg)\n", ax); // delete after testing
             current_morse = '.';
         }
-        else if (az < -0.1) {
-            printf("DOWN: %.2fg)\n", az); // delete after testing
+        else if (ax < -0.1) {
+            printf("DOWN: %.2fg)\n", ax); // delete after testing
             current_morse = '-';
         }
         
@@ -83,30 +63,36 @@ static void read_accelerometer() {
 
 
 
-static void read_gyroscope() {
-    float ax, ay, az, gx, gy, gz, t;
-    ICM42670_start_with_default_values();
-    for (size_t i = 0; i < 1; i++)
-    {
-        /* code */
+
+void play_jingle(const uint32_t *notes, const uint32_t *durations) {
+    for (uint32_t i = 0; notes[i] != 0; i++) {
+        uint32_t duration = durations[i] *1;
+        buzzer_play_tone(notes[i], duration);
+        vTaskDelay(pdMS_TO_TICKS(60));
     }
-    
-    if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
-    {
-        if (gx < 100 && gx > 50) {
-            current_morse = '.';
-        }
-        else if (gx < -50 && gx > -100) {
-            current_morse = '-';
-        }
-        else if (gx < 50 && gx > -50) {
-            current_morse = ' ';
-        }        
-    }
-    printf("gyroscope data %f \n", gx);
 }
 
-static void read_gyro_memory() {
+const uint32_t megalovania_notes[] = {294, 294, 587, 440, 415, 392, 349, 294, 349, 392,0};
+    
+//262, 262, 262, 262, 587, 440, 415, 392, 349, 294, 349,
+  //  392, 247, 247, 587, 440, 415, 392, 349, 294, 349, 392, 233, 233, 233, 233, 587, 440, 415, 392, 349, 294, 349, 392,0 };
+
+const uint32_t megalovania_durations[] = {125, 125, 250, 250, 125, 250, 250,125, 125, 125,0};
+    
+    /*62, 62, 62, 62,       
+    250, 375, 125, 250, 250, 125, 125, 125, 
+    125, 125, 250, 375, 125, 250, 250,   
+    125, 125, 125, 62, 62, 62, 62,       
+    250, 375, 125, 250, 250, 125, 125, 125,
+    0  
+};*/
+
+
+
+
+/// NOT YET FULLY WORKING, PROTOTYPE BELOW
+
+float read_gyro_memory() {
     float ax, ay, az, gx, gy, gz, t;
     ICM42670_start_with_default_values();
     float highest_value = 0;
@@ -114,22 +100,64 @@ static void read_gyro_memory() {
     {
         gyroscope_data[gyroscope_data_index] = gz;
         gyroscope_data_index ++;
-        for (int i = 0; i < 30; i++)
+        for (int i = 0; i < 11; i++)
         {
-            if (gyroscope_data[i] highest_value){
-                highest_value = gyroscope_data[i]
+            if (fabsf(gyroscope_data[i]) > fabsf(highest_value)){
+                highest_value = gyroscope_data[i];
             }
-            
         }
          
-        if (gyroscope_data_index => 29)
+        if (gyroscope_data_index >= 9)
         {
-            gyroscope_data_index = 0
+            gyroscope_data_index = 0;
         }
-        
+        printf("gx value %f\n", gz);
+        printf("gx value %f\n", highest_value);
+        for (int i = 0; i < 10; i++)
+        {
+            printf("gyroscope data %f %d\n", gyroscope_data[i], i);
+        }
+         
     }
-    return highest_value
+    return highest_value;
 }
+
+
+static void read_gyroscope() {
+    float gx_highest = read_gyro_memory();
+    if (gx_highest < 100 && gx_highest > 50) {
+        current_morse = '.';
+    }
+    else if (gx_highest < -50 && gx_highest > -100) {
+        current_morse = '-';
+    }
+    else if (gx_highest < 50 && gx_highest > -50) {
+        current_morse = ' ';
+    }        
+    
+    printf("gyroscope data %f \n", gx_highest);
+}
+
+static void read_orientation() {
+    float ax, ay, az, gx, gy, gz, t;
+    ICM42670_start_with_default_values();
+    if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
+    { 
+        printf("ax: %f ay: %f az: %f others: %f %f %f\n", ax, ay, az,gx,gy,t);
+        if (az >= 0.85){
+            current_morse =  '.';
+        }
+        else if (az < -0.85)
+        {
+            current_morse = '-';   
+        }
+        else {
+            current_morse = ' ';
+        }  
+    }
+}
+
+
 
 static void read_sensor(void *arg) {
     printf("read_sensor started %d\n", lower_state);
@@ -143,6 +171,10 @@ static void read_sensor(void *arg) {
                 read_gyroscope();
                 break;
             
+            case 2: 
+                read_orientation();
+                break;
+            
             default:
                 read_accelerometer();
                 break;
@@ -151,7 +183,7 @@ static void read_sensor(void *arg) {
         printf("lower state changed\n");
         lower_state = WRITE_TO_MEMORY;
                 
-        vTaskDelay(pdMS_TO_TICKS(100)); 
+        vTaskDelay(pdMS_TO_TICKS(1)); 
             }
         }
     }
@@ -257,7 +289,7 @@ void morse_code_light(char* morse_code){//turn received morse into led light int
     }
 }
 
-void morse_code_buzzer(char*morse_code){
+void morse_code_buzzer(char*morse_code){//turn received more code into buzzer sounds
     init_buzzer();
 
     for (int i=0; morse_code[i] !='\n' && morse_code[i] !='\0';i++){
@@ -266,13 +298,13 @@ void morse_code_buzzer(char*morse_code){
 
 
         if (morse_code[i] == '.') {
-            buzzer_play_tone(440,200)
-            vTaskDelay(pdMS_TO_TICKS(200));//amount of ticks to indicate its a dot
+            buzzer_play_tone(440,100);
+            vTaskDelay(pdMS_TO_TICKS(100));//amount of ticks to indicate its a dot
         } 
 
         else if (morse_code[i] == '-') { 
-            buzzer_play_tone(440,600)
-            vTaskDelay(pdMS_TO_TICKS(600));//amount of ticks to indicate its a dash
+            buzzer_play_tone(440,400);
+            vTaskDelay(pdMS_TO_TICKS(100));//amount of ticks to indicate its a dash
         }
 
         else if (morse_code[i] == ' ') {
@@ -285,35 +317,10 @@ void morse_code_buzzer(char*morse_code){
     }
 }
 
-
-void play_jingle(const uint32_t *notes, const uint32_t *durations, uint32_t tempo_ms) {
-    for (uint32_t i = 0; notes[i] != 0; i++) {
-        uint32_t duration = durations[i] * tempo_ms;
-        buzzer_play_tone(notes[i], duration);
-        vTaskDelay(pdMS_TO_TICKS(60));
-    }
-}
-
-const uint32_t megalovania_notes[] = {
-    294, 294, 587, 440, 415, 392, 349,    // D4, D4, D5, A4, GS4, G4, F4
-    294, 349, 392, 262, 262, 262, 262,     // D4, F4, G4, C4, C4, C4, C4
-    587, 440, 415, 392, 349, 294, 349, 392, // D5, A4, GS4, G4, F4, D4, F4, G4
-    247, 247, 587, 440, 415, 392, 349,     // B3, B3, D5, A4, GS4, G4, F4
-    294, 349, 392, 233, 233, 233, 233,     // D4, F4, G4, AS3, AS3, AS3, AS3
-    587, 440, 415, 392, 349, 294, 349, 392, // D5, A4, GS4, G4, F4, D4, F4, G4
-    0  
-};
-
-const uint32_t megalovania_durations[] = {
-    125, 125, 250, 250, 125, 250, 250,    // Durations for first line
-    125, 125, 125, 62, 62, 62, 62,        // Durations for second line
-    250, 375, 125, 250, 250, 125, 125, 125, // Durations for third line
-    125, 125, 250, 375, 125, 250, 250,    // Durations for fourth line
-    125, 125, 125, 62, 62, 62, 62,        // Durations for fifth line
-    250, 375, 125, 250, 250, 125, 125, 125, // Durations for sixth line
-    0  
-};
-
+#define dot;
+#define dash;
+#define word_gap;
+#define letter_gap;
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     if (gpio  == BUTTON1)
@@ -350,17 +357,30 @@ static void display_task(void *arg) {
 
         case MENU_SEND:
             if (button_pressed_2) {
+                //play_jingle(megalovania_notes,megalovania_durations);
                 button_pressed_2 = 0;
                 button_pressed_1 = 0;
+                memset(morse_message,0,strlen(morse_message)); // taken from https://stackoverflow.com/questions/8107826/proper-way-to-empty-a-c-string, clears the string when we return to menu
                 upper_state = MENU_IDLE;
             }
             break;
 
         case MENU_RECEIVE:
-            if (message_received) {
+            if (message_received && strlen(received_morse_code) <=25) {
                 upper_state = UPPER_PROCESSING;
             }
+            else if (message_received && strlen(received_morse_code) >25)
+            {   
+                clear_display();
+                vTaskDelay(pdMS_TO_TICKS(100));
+                write_text_xy(0,0,"too long XD");
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                message_received = false;
+                upper_state = MENU_IDLE;
+            }
+            
             else if (button_pressed_2) {
+                //play_jingle(megalovania_notes,megalovania_durations);
                 button_pressed_2 = 0;
                 upper_state = MENU_IDLE;
             }
@@ -368,12 +388,13 @@ static void display_task(void *arg) {
 
         case UPPER_PROCESSING:
             morse_code_light(received_morse_code);
-            clear_display();
-            write_text_xy(0,0,"received morse code:");
             vTaskDelay(pdMS_TO_TICKS(300));
             clear_display();
+
             // if len.received_morse_code > something : write writetext(a), writetext(b)
             write_text_xy(0,10,received_morse_code);
+            morse_code_buzzer(received_morse_code);
+
             vTaskDelay(pdMS_TO_TICKS(500));
             clear_display();
             message_received = false;
@@ -387,13 +408,14 @@ static void display_task(void *arg) {
             case MENU_IDLE:
                 write_text_xy(0,0, "1:Send a Message");
                 write_text_xy(0,10,"2:Receive a Message");
+                play_jingle(megalovania_notes,megalovania_durations);
                 break;
             case MENU_SEND:
                 write_text_xy(0,0,"Send Mode");
                 write_text_xy(0,10,morse_message);
-
-                write_text_xy(0,20,"Press 1 to send input");
-                write_text_xy(0,30,"Press 2 to go back");
+                write_text_xy(0,20,"Press 2 to go back");
+                write_text_xy(0,30,"Press 1 to write");
+                write_text_xy(0,40,"character");
                 break;
             case MENU_RECEIVE:
                 write_text_xy(0,0,"Receive Mode");
@@ -417,17 +439,11 @@ static void display_task(void *arg) {
 }
 }
 
-static void example_task(void *arg){
-    (void)arg;
-
-    for(;;){
-        tight_loop_contents(); // Modify with application code here.
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
-}
 
 int main() {
     stdio_init_all();
+    init_buzzer();
+
     // Uncomment this lines if you want to wait till the serial monitor is connected
     while (!stdio_usb_connected()){
         sleep_ms(10);
