@@ -96,8 +96,8 @@ uint32_t read_light_sensor() {
     // Set current_morse based on lux thresholds
     light_lux = (uint32_t)luxVal;
 
-    if (luxVal > 200) current_morse = '.';
-    else if (luxVal < 50) current_morse = '-';
+    if (luxVal > 50) current_morse = '.';
+    else if (luxVal < 10) current_morse = '-';
     else current_morse = ' ';
 
     printf("Lux: %lu | current_morse: %c\n", light_lux, current_morse);
@@ -246,18 +246,11 @@ static void read_button(void *arg) {
                     printf("Stored: %c | Entire message: %s | BUTTON 1 %d and BUTTON 2 %d\n", current_morse, morse_message, BUTTON1, BUTTON2);
                 }
             }
-            else if (button_pressed_2)
-            {
-                button_pressed_2 = 0;
-                morse_message[morse_index++] = ' ';
-                morse_message[morse_index] = '\0'; /// 
-                printf("Stored: %c | Entire message: %s\n", current_morse, morse_message); /// only for testing               
-            }
             
                 
             current_morse = '\0';
             lower_state = WAITING;  /// Ready for next motion
-            vTaskDelay(pdMS_TO_TICKS(250));
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
     }
 
@@ -417,10 +410,14 @@ static void display_task(void *arg) {
         case MENU_SEND_DEVICE_SELECT:
 
             if (button_pressed_1) {
+                button_pressed_1 = 0;
+                button_pressed_2 = 0;
                 measurement_device_index = 1;
                 upper_state = MENU_SEND;}   
             
             else if (button_pressed_2) { 
+                button_pressed_1 = 0;
+                button_pressed_2 = 0;
                 measurement_device_index = 2;
                 upper_state = MENU_SEND; }
 
@@ -429,6 +426,7 @@ static void display_task(void *arg) {
         case MENU_RECEIVE:
 
             if (message_received && strlen(received_morse_code) <=25) {
+
                 upper_state = UPPER_PROCESSING;
             }
             else if (message_received && strlen(received_morse_code) >25)
