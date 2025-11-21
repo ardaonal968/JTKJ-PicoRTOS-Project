@@ -414,7 +414,9 @@ static void display_task(void *arg) {
             }
             break;
         
-        case MENU_SEND_DEVICE_SELECT: 
+        case MENU_SEND_DEVICE_SELECT:
+            button_pressed_1 = 0;
+            button_pressed_2 = 0; 
             if (button_pressed_1) {
                 measurement_device_index = 1;
                 button_pressed_1 = 0;
@@ -451,6 +453,7 @@ static void display_task(void *arg) {
             break;
 
         case UPPER_PROCESSING:
+            
             morse_code_light(received_morse_code);
             vTaskDelay(pdMS_TO_TICKS(30));
             clear_display();
@@ -532,8 +535,8 @@ int main() {
     ICM42670_start_with_default_values();
     init_veml6030();
 
-    gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
-    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
+    gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
+    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
     printf("init successful");
     TaskHandle_t sensorTask, buttonTask, displayTask, hUsb = NULL;
     
