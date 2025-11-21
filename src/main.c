@@ -27,15 +27,10 @@ static volatile uint8_t button_pressed_1, button_pressed_2, ignore_buttons=false
 
 
 char current_morse;
-
 char morse_message[257];
-
 int morse_index = 0;
-
 int measurement_device_index = 2;
-
 float gyroscope_data[10];
-
 int gyroscope_data_index = 0;
 
 int16_t sample_buffer[MEMS_BUFFER_SIZE];
@@ -48,21 +43,6 @@ static void on_sound_buffer_ready(){
     samples_read = get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
 }
 
-
-/*
-static void read_mic() {
-    if (init_microphone_sampling()<0){
-        sleep_ms(500);
-        printf("Cannot start sampling the microphone\n");
-    
-    end_microphone_sampling();
-    get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
-    for (int i = 0; i < sample_count; i++) {
-        printf("%d\n", temp_sample_buffer[i]);
-        sent_bytes += sizeof(temp_sample_buffer[0]);
-    }
-    }
-}*/
 
 static void read_accelerometer() {
     float ax, ay, az, gx, gy, gz, t;
@@ -84,33 +64,28 @@ static void read_accelerometer() {
 
 
 
-void play_jingle(const uint32_t *notes, const uint32_t *durations, uint32_t tempo_ms) {
+void play_jingle(const uint32_t *notes, const uint32_t *durations) {
     for (uint32_t i = 0; notes[i] != 0; i++) {
-        uint32_t duration = durations[i] * tempo_ms;
+        uint32_t duration = durations[i] *1;
         buzzer_play_tone(notes[i], duration);
         vTaskDelay(pdMS_TO_TICKS(60));
     }
 }
 
-const uint32_t megalovania_notes[] = {
-    294, 294, 587, 440, 415, 392, 349,    // D4, D4, D5, A4, GS4, G4, F4
-    294, 349, 392, 262, 262, 262, 262,     // D4, F4, G4, C4, C4, C4, C4
-    587, 440, 415, 392, 349, 294, 349, 392, // D5, A4, GS4, G4, F4, D4, F4, G4
-    247, 247, 587, 440, 415, 392, 349,     // B3, B3, D5, A4, GS4, G4, F4
-    294, 349, 392, 233, 233, 233, 233,     // D4, F4, G4, AS3, AS3, AS3, AS3
-    587, 440, 415, 392, 349, 294, 349, 392, // D5, A4, GS4, G4, F4, D4, F4, G4
-    0  
-};
+const uint32_t megalovania_notes[] = {294, 294, 587, 440, 415, 392, 349, 294, 349, 392,0};
+    
+//262, 262, 262, 262, 587, 440, 415, 392, 349, 294, 349,
+  //  392, 247, 247, 587, 440, 415, 392, 349, 294, 349, 392, 233, 233, 233, 233, 587, 440, 415, 392, 349, 294, 349, 392,0 };
 
-const uint32_t megalovania_durations[] = {
-    125, 125, 250, 250, 125, 250, 250,    // Durations for first line
-    125, 125, 125, 62, 62, 62, 62,        // Durations for second line
-    250, 375, 125, 250, 250, 125, 125, 125, // Durations for third line
-    125, 125, 250, 375, 125, 250, 250,    // Durations for fourth line
-    125, 125, 125, 62, 62, 62, 62,        // Durations for fifth line
-    250, 375, 125, 250, 250, 125, 125, 125, // Durations for sixth line
+const uint32_t megalovania_durations[] = {125, 125, 250, 250, 125, 250, 250,125, 125, 125,0};
+    
+    /*62, 62, 62, 62,       
+    250, 375, 125, 250, 250, 125, 125, 125, 
+    125, 125, 250, 375, 125, 250, 250,   
+    125, 125, 125, 62, 62, 62, 62,       
+    250, 375, 125, 250, 250, 125, 125, 125,
     0  
-};
+};*/
 
 
 
@@ -130,7 +105,6 @@ float read_gyro_memory() {
             if (fabsf(gyroscope_data[i]) > fabsf(highest_value)){
                 highest_value = gyroscope_data[i];
             }
-            
         }
          
         if (gyroscope_data_index >= 9)
@@ -315,7 +289,7 @@ void morse_code_light(char* morse_code){//turn received morse into led light int
     }
 }
 
-void morse_code_buzzer(char*morse_code){
+void morse_code_buzzer(char*morse_code){//turn received more code into buzzer sounds
     init_buzzer();
 
     for (int i=0; morse_code[i] !='\n' && morse_code[i] !='\0';i++){
@@ -343,6 +317,10 @@ void morse_code_buzzer(char*morse_code){
     }
 }
 
+#define dot;
+#define dash;
+#define word_gap;
+#define letter_gap;
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     if (gpio  == BUTTON1)
@@ -379,6 +357,7 @@ static void display_task(void *arg) {
 
         case MENU_SEND:
             if (button_pressed_2) {
+                //play_jingle(megalovania_notes,megalovania_durations);
                 button_pressed_2 = 0;
                 button_pressed_1 = 0;
                 memset(morse_message,0,strlen(morse_message)); // taken from https://stackoverflow.com/questions/8107826/proper-way-to-empty-a-c-string, clears the string when we return to menu
@@ -387,10 +366,10 @@ static void display_task(void *arg) {
             break;
 
         case MENU_RECEIVE:
-            if (message_received && strlen(received_morse_code) <=20) {
+            if (message_received && strlen(received_morse_code) <=25) {
                 upper_state = UPPER_PROCESSING;
             }
-            else if (message_received && strlen(received_morse_code) >20)
+            else if (message_received && strlen(received_morse_code) >25)
             {   
                 clear_display();
                 vTaskDelay(pdMS_TO_TICKS(100));
@@ -401,6 +380,7 @@ static void display_task(void *arg) {
             }
             
             else if (button_pressed_2) {
+                //play_jingle(megalovania_notes,megalovania_durations);
                 button_pressed_2 = 0;
                 upper_state = MENU_IDLE;
             }
@@ -428,11 +408,14 @@ static void display_task(void *arg) {
             case MENU_IDLE:
                 write_text_xy(0,0, "1:Send a Message");
                 write_text_xy(0,10,"2:Receive a Message");
+                play_jingle(megalovania_notes,megalovania_durations);
                 break;
             case MENU_SEND:
                 write_text_xy(0,0,"Send Mode");
                 write_text_xy(0,10,morse_message);
                 write_text_xy(0,20,"Press 2 to go back");
+                write_text_xy(0,30,"Press 1 to write");
+                write_text_xy(0,40,"character");
                 break;
             case MENU_RECEIVE:
                 write_text_xy(0,0,"Receive Mode");
@@ -452,18 +435,10 @@ static void display_task(void *arg) {
     }
     
 
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(100));
 }
 }
 
-//static void example_task(void *arg){
-//    (void)arg;
-//
-//    for(;;){
-//        tight_loop_contents(); // Modify with application code here.
-//        vTaskDelay(pdMS_TO_TICKS(2000));
-//    }
-//}
 
 int main() {
     stdio_init_all();
