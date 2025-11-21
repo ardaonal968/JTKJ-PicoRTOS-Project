@@ -14,6 +14,11 @@
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
 #define DEFAULT_STACK_SIZE 2048 
 
+//
+//INSTRUCTIONS//
+// turn up for dot, turn down for dash, straight for space.
+// high light level for dot, low light level for dash.
+
 
 
 //Add here necessary states
@@ -252,7 +257,7 @@ static void read_button(void *arg) {
                 
             current_morse = '\0';
             lower_state = WAITING;  /// Ready for next motion
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(250));
         }
     }
 
@@ -404,9 +409,8 @@ static void display_task(void *arg) {
                 morse_index = 0;
                 current_morse = '\0';
                 lower_state = WAITING;
-                button_pressed_1 = 0;
-                button_pressed_2 = 0;
                 upper_state = MENU_IDLE;
+                vTaskDelay(pdMS_TO_TICKS(200));
             }
             break;
         
@@ -448,7 +452,7 @@ static void display_task(void *arg) {
 
         case UPPER_PROCESSING:
             morse_code_light(received_morse_code);
-            vTaskDelay(pdMS_TO_TICKS(300));
+            vTaskDelay(pdMS_TO_TICKS(30));
             clear_display();
 
             // if len.received_morse_code > something : write writetext(a), writetext(b)
