@@ -14,8 +14,10 @@
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
 #define DEFAULT_STACK_SIZE 2048 
 
+
+
 //Add here necessary states
-enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5, MENU_IDLE, MENU_SEND, MENU_RECEIVE};
+enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5, MENU_IDLE, MENU_SEND, MENU_RECEIVE, MENU_SEND_DEVICE_SELECT };
 enum state menu_state= MENU_IDLE;
 enum state lower_state = WAITING;
 enum state upper_state = UPPER_IDLE;
@@ -23,13 +25,13 @@ char received_morse_code[256] = {0};//buffer to store
 bool message_received = false;
 static volatile uint8_t button_pressed_1, button_pressed_2, ignore_buttons=false;
 
-
+float light_lux=0;
+int measurement_device_index = 1; // default: IMU
 
 
 char current_morse;
 char morse_message[257];
 int morse_index = 0;
-int measurement_device_index = 2;
 float gyroscope_data[10];
 int gyroscope_data_index = 0;
 
@@ -59,6 +61,48 @@ static void read_accelerometer() {
         
     }
 }
+
+uint32_t read_light_sensor() {
+    uint8_t txBuffer[1] = { VEML6030_ALS_REG };
+    uint8_t rxBuffer[2] = {0, 0};
+    float luxVal_uncorrected = 0;
+    float luxVal =0;
+    if (i2c_write_blocking(i2c_default, VEML6030_I2C_ADDR, txBuffer, 1, true) >= 0) {
+        if (i2c_read_blocking(i2c_default, VEML6030_I2C_ADDR, rxBuffer, 2, false) >= 0) {
+            printf("RX0: %02X RX1: %02X\n", rxBuffer[0], rxBuffer[1]);
+
+
+            uint16_t raw =(((uint16_t)rxBuffer[1] << 8) | rxBuffer[0]) * 0.5376f;
+            luxVal_uncorrected = raw * 0.5376f;
+            printf("RAW: 0x%04X | RX0: %02X RX1: %02X\n", raw, rxBuffer[0], rxBuffer[1]);
+
+        }
+    }
+
+    luxVal = luxVal_uncorrected; 
+
+    if (luxVal_uncorrected > 1000.0f) {
+        luxVal = (.00000000000060135f * powf(luxVal_uncorrected, 4)) - 
+                 (.0000000093924f * powf(luxVal_uncorrected, 3)) + 
+                 (.000081488f * powf(luxVal_uncorrected, 2)) + 
+                 (1.0023f * luxVal_uncorrected);
+    }
+
+    // Set current_morse based on lux thresholds
+    light_lux = (uint32_t)luxVal;
+
+    if (luxVal > 200) current_morse = '.';
+    else if (luxVal < 50) current_morse = '-';
+    else current_morse = ' ';
+
+    printf("Lux: %lu | current_morse: %c\n", light_lux, current_morse);
+
+    return (uint32_t)luxVal;
+}
+
+
+
+
 
 
 
@@ -163,27 +207,24 @@ static void read_sensor(void *arg) {
     while(1) {
         if (lower_state == WAITING && upper_state == MENU_SEND) {
             switch (measurement_device_index)
-            {
-            case 1:
-                read_gyroscope();
-                break;
-            
-            case 2: 
-                read_orientation();
-                break;
-            
-            default:
-                read_accelerometer();
-                break;
-            }
+{
+                case 1: 
+                    read_light_sensor();
+                    break;
+                case 2:
+                    read_orientation();
+                    break;
+                default:
+                    read_orientation();
+                    break;
+}
                        
         printf("lower state changed\n");
         lower_state = WRITE_TO_MEMORY;
                 
             }
-        vTaskDelay(pdMS_TO_TICKS(5));   
-        }
-    }
+        vTaskDelay(pdMS_TO_TICKS(100));   
+        }}
 
 static void read_button(void *arg) {
     printf("read_button started %d\n", lower_state);
@@ -341,7 +382,7 @@ static void display_task(void *arg) {
         case MENU_IDLE:
             if (button_pressed_1) {
                 button_pressed_1 = 0;
-                upper_state = MENU_SEND;
+                upper_state = MENU_SEND_DEVICE_SELECT;
             }
             else if (button_pressed_2) {
                 button_pressed_2 = 0;
@@ -368,6 +409,21 @@ static void display_task(void *arg) {
                 upper_state = MENU_IDLE;
             }
             break;
+        
+        case MENU_SEND_DEVICE_SELECT: 
+            if (button_pressed_1) {
+                measurement_device_index = 1;
+                button_pressed_1 = 0;
+                button_pressed_2 = 0;
+                upper_state = MENU_SEND;}   
+            
+            else if (button_pressed_2) { 
+                measurement_device_index = 2;
+                button_pressed_2 = 0;
+                button_pressed_1 = 0;
+                upper_state = MENU_SEND; }
+
+        break;
 
         case MENU_RECEIVE:
             if (message_received && strlen(received_morse_code) <=25) {
@@ -421,6 +477,12 @@ static void display_task(void *arg) {
                 write_text_xy(0,30,"Press 1 to write");
                 write_text_xy(0,40,"character");
                 break;
+
+            case MENU_SEND_DEVICE_SELECT:
+                write_text_xy(0,0,"Press 1 for Light");
+                write_text_xy(0,10,"Press 2 for IMU");
+                break;
+            
             case MENU_RECEIVE:
                 write_text_xy(0,0,"Receive Mode");
                 write_text_xy(0,10,"Press 2 to go back");
@@ -448,6 +510,7 @@ int main() {
     stdio_init_all();
     init_buzzer();
 
+
     // Uncomment this lines if you want to wait till the serial monitor is connected
     while (!stdio_usb_connected()){
         sleep_ms(10);
@@ -459,8 +522,11 @@ int main() {
 
     printf("first print worked");
     init_hat_sdk();
+    init_i2c_default();
+
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
     ICM42670_start_with_default_values();
+    init_veml6030();
 
     gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
     gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
