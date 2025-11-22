@@ -33,6 +33,10 @@ static volatile uint8_t button_pressed_1, button_pressed_2, ignore_buttons=false
 float light_lux=0;
 int measurement_device_index = 1; // default: IMU
 
+const uint32_t megalovania_notes[] = {294, 294, 587, 440, 415, 392, 349, 294, 349, 392,0};
+
+const uint32_t megalovania_durations[] = {125, 125, 250, 250, 125, 250, 250,125, 125, 125,0};
+
 
 char current_morse;
 char morse_message[257];
@@ -119,23 +123,6 @@ void play_jingle(const uint32_t *notes, const uint32_t *durations) {
         vTaskDelay(pdMS_TO_TICKS(60));
     }
 }
-
-const uint32_t megalovania_notes[] = {294, 294, 587, 440, 415, 392, 349, 294, 349, 392,0};
-    
-//262, 262, 262, 262, 587, 440, 415, 392, 349, 294, 349,
-  //  392, 247, 247, 587, 440, 415, 392, 349, 294, 349, 392, 233, 233, 233, 233, 587, 440, 415, 392, 349, 294, 349, 392,0 };
-
-const uint32_t megalovania_durations[] = {125, 125, 250, 250, 125, 250, 250,125, 125, 125,0};
-    
-    /*62, 62, 62, 62,       
-    250, 375, 125, 250, 250, 125, 125, 125, 
-    125, 125, 250, 375, 125, 250, 250,   
-    125, 125, 125, 62, 62, 62, 62,       
-    250, 375, 125, 250, 250, 125, 125, 125,
-    0  
-};*/
-
-
 
 
 /* NOT YET FULLY WORKING, PROTOTYPE BELOW
@@ -297,8 +284,10 @@ static void usbTask(void *arg) {
 void morse_code_light(char* morse_code){//turn received morse into led light intervals
 
     for (int i=0; morse_code[i] !='\n' && morse_code[i] !='\0';i++){
-        //message ends with two spaces and new line(\n) according to the doc so it should recognize it?
+        //go through all morse code
         if (morse_code[i] == ' ' && morse_code[i+1] == ' ' && morse_code[i+2] == '\n') {break;}
+        //message ends with two spaces and new line(\n) according to the doc so it should recognize it?
+
 
 
         if (morse_code[i] == '.') {
@@ -331,8 +320,10 @@ void morse_code_buzzer(char*morse_code){//turn received more code into buzzer so
     init_buzzer();
 
     for (int i=0; morse_code[i] !='\n' && morse_code[i] !='\0';i++){
-        //message ends with two spaces and new line(\n) according to the doc so it should recognize it?
+        //go through all morse code
         if (morse_code[i] == ' ' && morse_code[i+1] == ' ' && morse_code[i+2] == '\n') {break;}
+        //message ends with two spaces and new line(\n) according to the doc so it should recognize it?
+
 
 
         if (morse_code[i] == '.') {
@@ -356,7 +347,7 @@ void morse_code_buzzer(char*morse_code){//turn received more code into buzzer so
 }
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
-    
+    // Button handler //
     if (gpio  == BUTTON1)
         button_pressed_1 = true;
     else if (gpio == BUTTON2)
@@ -365,6 +356,7 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
 
 
 static void display_task(void *arg) {
+    // LCD display configuration //
     (void)arg;
 
     init_display();
@@ -377,6 +369,7 @@ static void display_task(void *arg) {
     for (;;) {
 
     switch (upper_state) {
+    //handles user input and state transitions, UI elements implemented on a non-looping iteration.
 
         case MENU_IDLE:
 
@@ -393,6 +386,7 @@ static void display_task(void *arg) {
         case MENU_SEND:
             if (button_pressed_2) {
                 strcat(morse_message, "  \n");
+                // append two empty spaces and line break before sending, not sure if necessary?
 
                 tud_cdc_n_write(0, (uint8_t const *)morse_message, strlen(morse_message));
                 tud_cdc_n_write_flush(0);
@@ -462,33 +456,37 @@ static void display_task(void *arg) {
             break;
     }
 
-    if (upper_state != last_state) { // so that screen doesnt flicker
+    if (upper_state != last_state) {
+        // Implemented because of problems regarding screen flickering
         button_pressed_1 = 0;
         button_pressed_2 = 0;
+        // When there is a state transition, reset buttons
         clear_display();
         switch (upper_state) {
             case MENU_IDLE:
-                write_text_xy(0,0, "1:Send a Message");
-                write_text_xy(0,10,"2:Receive a Message");
+                write_text_xy(40,0,"Welcome!");
+                write_text_xy(0,10, "1:Send a Message");
+                write_text_xy(0,20,"2:Receive a Message");
                 play_jingle(megalovania_notes,megalovania_durations);
                 break;
             case MENU_SEND:
                 
-                write_text_xy(0,0,"Send Mode");
-                write_text_xy(0,10,morse_message);
-                write_text_xy(0,20,"Press 2 to go back");
-                write_text_xy(0,30,"Press 1 to write");
+                write_text_xy(40,0,"Send Mode");
+                //write_text_xy(0,10,morse_message);
+                write_text_xy(0,20,"2:Back to Menu");
+                write_text_xy(0,30,"1:Write Character");
                 write_text_xy(0,40,"character");
                 break;
 
             case MENU_SEND_DEVICE_SELECT:
-                write_text_xy(0,0,"Press 1 for Light");
-                write_text_xy(0,10,"Press 2 for IMU");
+                write_text_xy(0,0,"1:Light Sensor Mode");
+                write_text_xy(0,10,"2:IMU Mode");
                 break;
             
             case MENU_RECEIVE:
-                write_text_xy(0,0,"Receive Mode");
-                write_text_xy(0,10,"Press 2 to go back");
+                write_text_xy(30,0,"Receive Mode");
+                write_text_xy(0,20,"Waiting for Input!");
+                write_text_xy(0,30,"2:Back to Menu");
                 break;
             case UPPER_PROCESSING:
                 write_text_xy(0,0,"Processing");
@@ -496,11 +494,12 @@ static void display_task(void *arg) {
         }
         last_state = upper_state;
     }
-    else if (upper_state == MENU_SEND) // screen only updates if we are in MENU_SEND, so that the user can read their message
+    else if (upper_state == MENU_SEND)
+    // screen only updates if we are in MENU_SEND, so that there is real time displayment of the morse message
     {
-        write_text_xy(0,0,"Send Mode");
+        //write_text_xy(0,0,"Send Mode");
         write_text_xy(0,10,morse_message);
-        write_text_xy(0,20,"Press 2 to go back");
+        //write_text_xy(0,20,"Press 2 to go back");
     }
     
 
