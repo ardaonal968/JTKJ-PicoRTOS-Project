@@ -9,12 +9,12 @@
 #include <task.h>
 
 #include "tkjhat/sdk.h"
-#include "tusb.h"//the library used to create a serial port over USB, according to part 5 
+#include "tusb.h"//the library used to create a serial port over USB
 #include <math.h>
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
 #define DEFAULT_STACK_SIZE 2048 
 
-//
+
 //INSTRUCTIONS//
 // turn up for dot, turn down for dash, straight for space.
 // high light level for dot, dim light level for space, low light level for dash.
@@ -27,13 +27,13 @@ enum state lower_state = WAITING;
 enum state upper_state = UPPER_IDLE;
 char received_morse_code[256] = {0};//buffer to store 
 bool message_received = false;
+int receive_index = 0;
 static volatile uint8_t button_pressed_1, button_pressed_2, ignore_buttons=false;
 
 float light_lux=0;
 int measurement_device_index = 1; // default: IMU
 
-const uint32_t megalovania_notes[] = {294, 294, 587, 440, 415, 392, 349, 294, 349, 392,0};
-
+const uint32_t megalovania_notes[] = {294, 294, 587, 440, 415, 392, 349, 294, 349, 392,0};//notes for the jingle
 const uint32_t megalovania_durations[] = {125, 125, 250, 250, 125, 250, 250,125, 125, 125,0};
 
 
@@ -49,40 +49,19 @@ int16_t temp_sample_buffer[MEMS_BUFFER_SIZE];//use to have two different buffers
 
 volatile int samples_read = 0;
 
-static void on_sound_buffer_ready(){
-    samples_read = get_microphone_samples(sample_buffer, MEMS_BUFFER_SIZE);
-}
-
-
-static void read_accelerometer() {
-    float ax, ay, az, gx, gy, gz, t;
-    if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
-    {
-        if (ax > 0.1) {
-            //printf("UP: %.2fg)\n", ax); // delete after testing
-            current_morse = '.';
-        }
-        else if (ax < -0.1) {
-            //printf("DOWN: %.2fg)\n", ax); // delete after testing
-            current_morse = '-';
-        }
-        
-    }
-}
 
 uint32_t read_light_sensor() {
-    uint8_t txBuffer[1] = { VEML6030_ALS_REG };
+    uint8_t txBuffer[1] = {VEML6030_ALS_REG};
     uint8_t rxBuffer[2] = {0, 0};
     float luxVal_uncorrected = 0;
     float luxVal =0;
     if (i2c_write_blocking(i2c_default, VEML6030_I2C_ADDR, txBuffer, 1, true) >= 0) {
         if (i2c_read_blocking(i2c_default, VEML6030_I2C_ADDR, rxBuffer, 2, false) >= 0) {
-            //printf("RX0: %02X RX1: %02X\n", rxBuffer[0], rxBuffer[1]);
 
 
             uint16_t raw =(((uint16_t)rxBuffer[1] << 8) | rxBuffer[0]) * 0.5376f;
             luxVal_uncorrected = raw * 0.5376f;
-            //printf("RAW: 0x%04X | RX0: %02X RX1: %02X\n", raw, rxBuffer[0], rxBuffer[1]);
+
 
         }
     }
@@ -106,15 +85,6 @@ uint32_t read_light_sensor() {
     //printf("Lux: %lu | current_morse: %c\n", light_lux, current_morse);
 
     return (uint32_t)luxVal;
-}
-
-
-void play_jingle(const uint32_t *notes, const uint32_t *durations) {
-    for (uint32_t i = 0; notes[i] != 0; i++) {
-        uint32_t duration = durations[i] *1;
-        buzzer_play_tone(notes[i], duration);
-        vTaskDelay(pdMS_TO_TICKS(60));
-    }
 }
 
 
@@ -157,7 +127,6 @@ static void read_sensor(void *arg) {
                     break;
 }
                        
-        //printf("lower state changed\n");
         lower_state = WRITE_TO_MEMORY;
                 
             }
@@ -165,18 +134,15 @@ static void read_sensor(void *arg) {
         }}
 
 static void read_button(void *arg) {
-    //printf("read_button started %d\n", lower_state);
     (void) arg;
     while (1) {
         if (lower_state == WRITE_TO_MEMORY) {
-            //printf("passed state check \n");
             if (button_pressed_1){   /// Writes the character to the message, if character is valid
                 button_pressed_1 = 0;
                 if (current_morse != '\0' && morse_index < 257) 
                 {
                     morse_message[morse_index++] = current_morse;
                     morse_message[morse_index] = '\0'; /// 
-                    //printf("Stored: %c | Entire message: %s | BUTTON 1 %d and BUTTON 2 %d\n", current_morse, morse_message, BUTTON1, BUTTON2);
                 }
             }
             
@@ -189,40 +155,59 @@ static void read_button(void *arg) {
 
 }
 
-int receive_index = 0;
+static void play_jingle(const uint32_t *notes, const uint32_t *durations) {
+    for (uint32_t i = 0; notes[i] != 0; i++) {
+        // for all notes, play the buzzer
+        buzzer_play_tone(notes[i], durations[i]);
+        vTaskDelay(pdMS_TO_TICKS(60));
+    }
+}
+
+
+static void btn_fxn(uint gpio, uint32_t eventMask) {
+    // Button handler //
+    if (gpio  == BUTTON1)
+        button_pressed_1 = true;
+    else if (gpio == BUTTON2)
+        button_pressed_2 = true;}
+
+
 
 static void receive_message(void *pvParameters) {
     (void)pvParameters; 
 
     while (1) {
-        int getchar = getchar_timeout_us(0); 
+        int getchar = getchar_timeout_us(0);
+        // non-blocking, look for characters from workstation
 
-        if (getchar >= 0) { 
+        if (getchar >= 0) {
+            // if character found
         
-            if (getchar == '\n' || getchar == '\r') {
-                
-                if (receive_index > 0) {
-                    received_morse_code[receive_index] = '\0'; 
-                    message_received = true; 
-                    
-                    receive_index = 0; 
-                    }} 
+            char received_character = (char)getchar;
 
-            else if (receive_index < sizeof(received_morse_code) - 1) {
-                received_morse_code[receive_index++] = (char)getchar;
-                putchar_raw((char)getchar); 
+            if (received_character != '\n' && receive_index < sizeof(received_morse_code) - 1) 
+            // if received character isn't a newline, and there is space in the buffer
+            {
+                received_morse_code[receive_index++] = received_character;}
+
+
+            else if (received_character == '\n') {
+                
+                if (receive_index > 0) {// check for empty messages
+                    received_morse_code[receive_index] = '\0';
+                    message_received = true;// flag for display_task to work
+                    receive_index = 0;// reset index
+                }
             }
         }
         
         vTaskDelay(pdMS_TO_TICKS(50));
-    }
-}
+}}
 
 
 static void usbTask(void *arg) {
     (void)arg;
     while (1) {
-        //printf("usbtask looping\n");
         tud_task();              // With FreeRTOS, wait for events
                                  // Do not add vTaskDelay.
     }
@@ -294,15 +279,6 @@ void morse_code_buzzer(char*morse_code){//turn received more code into buzzer so
     }
 }
 
-static void btn_fxn(uint gpio, uint32_t eventMask) {
-    // Button handler //
-    if (gpio  == BUTTON1)
-        button_pressed_1 = true;
-    else if (gpio == BUTTON2)
-        button_pressed_2 = true;}
-
-
-
 static void display_task(void *arg) {
     // LCD display configuration //
     (void)arg;
@@ -320,7 +296,6 @@ static void display_task(void *arg) {
     //handles user input and state transitions, UI elements implemented on a non-looping iteration.
 
         case MENU_IDLE:
-
             if (button_pressed_1) {
                 button_pressed_1 = 0;
                 upper_state = MENU_SEND_DEVICE_SELECT;
@@ -335,10 +310,10 @@ static void display_task(void *arg) {
             if (button_pressed_2) {
                 strcat(morse_message, "  \n");
                 // append two empty spaces and line break before sending, not sure if necessary?
-                printf("morse_message: %s",morse_message);
+                printf("%s",morse_message);
 
-               //tud_cdc_n_write(1, (uint8_t const *)morse_message, strlen(morse_message));
-                //tud_cdc_n_write_flush(1);
+                //tud_cdc_n_write(1, (uint8_t const *)morse_message, strlen(morse_message));
+                //tud_cdc_n_write_flush(1); 
 
                 memset(morse_message,0,sizeof(morse_message)); // taken from https://stackoverflow.com/questions/8107826/proper-way-to-empty-a-c-string, clears the string when we return to menu
 
@@ -368,7 +343,7 @@ static void display_task(void *arg) {
 
         case MENU_RECEIVE:
 
-            if (message_received && strlen(received_morse_code) <=25) {
+            if (message_received && strlen(received_morse_code) <=100) {
 
                 upper_state = UPPER_PROCESSING;
             }
@@ -378,6 +353,7 @@ static void display_task(void *arg) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 write_text_xy(0,0,"Message too long!");
                 vTaskDelay(pdMS_TO_TICKS(1000));
+                memset(received_morse_code, 0, sizeof(received_morse_code));
                 message_received = false;
                 upper_state = MENU_IDLE;
             }
@@ -391,16 +367,17 @@ static void display_task(void *arg) {
         case UPPER_PROCESSING:
 
             //printf("received_morse_code;%s\n",received_morse_code);    
-            morse_code_light(received_morse_code);
             vTaskDelay(pdMS_TO_TICKS(30));
             clear_display();
 
             // if len.received_morse_code > something : write writetext(a), writetext(b)
             write_text_xy(0,10,received_morse_code);
             morse_code_buzzer(received_morse_code);
+            morse_code_light(received_morse_code);
 
             vTaskDelay(pdMS_TO_TICKS(500));
             clear_display();
+            memset(received_morse_code, 0, sizeof(received_morse_code));
             message_received = false;
             upper_state = MENU_RECEIVE;
             break;
@@ -408,9 +385,8 @@ static void display_task(void *arg) {
 
     if (upper_state != last_state) {
         // Implemented because of problems regarding screen flickering
-        button_pressed_1 = 0;
+        button_pressed_1 = 0;// When there is a state transition, reset buttons
         button_pressed_2 = 0;
-        // When there is a state transition, reset buttons
         clear_display();
         switch (upper_state) {
             case MENU_IDLE:
@@ -425,7 +401,6 @@ static void display_task(void *arg) {
                 //write_text_xy(0,10,morse_message);
                 write_text_xy(0,20,"2:Back to Menu");
                 write_text_xy(0,30,"1:Write Character");
-                write_text_xy(0,40,"character");
                 break;
 
             case MENU_SEND_DEVICE_SELECT:
@@ -447,9 +422,7 @@ static void display_task(void *arg) {
     else if (upper_state == MENU_SEND)
     // screen only updates if we are in MENU_SEND, so that there is real time displayment of the morse message
     {
-        //write_text_xy(0,0,"Send Mode");
         write_text_xy(0,10,morse_message);
-        //write_text_xy(0,20,"Press 2 to go back");
     }
     
 
@@ -467,10 +440,8 @@ int main() {
     while (!stdio_usb_connected()){
         sleep_ms(10);
     } 
-    //printf("Start imc");
-    /// start all components being used
+
     
-    //printf("first print worked");
     init_hat_sdk();
     init_i2c_default();
 
@@ -484,14 +455,6 @@ int main() {
     TaskHandle_t sensorTask, buttonTask, receiveTask, displayTask, hUsb = NULL;
     
 
-    // Create the tasks with xTaskCreate
-    //BaseType_t result = xTaskCreate(example_task,       // (en) Task function
-    //            "example",              // (en) Name of the task 
-    //            DEFAULT_STACK_SIZE, // (en) Size of the stack for this task (in words). Generally 1024 or 2048
-    //            NULL,               // (en) Arguments of the task 
-    //            2,                  // (en) Priority of this task
-    //            &myExampleTask);    // (en) A handle to control the execution of this task
-
     // Create the sensor task
     BaseType_t result = xTaskCreate(read_sensor, "read_sensor", DEFAULT_STACK_SIZE, NULL, 2, &sensorTask);
     if (result != pdPASS) {
@@ -500,6 +463,10 @@ int main() {
     }
     // Create the receive task
     result = xTaskCreate(receive_message, "receive_message", DEFAULT_STACK_SIZE,NULL, 2,  &receiveTask);
+    if (result != pdPASS) {
+        printf("Receive Task creation failed\n");
+        return 0;
+    }
 
     // Create the button task
     result = xTaskCreate(read_button, "read_button", DEFAULT_STACK_SIZE, NULL, 2, &buttonTask);
@@ -519,7 +486,7 @@ int main() {
     }
 
     // Create the usb task
-    result = xTaskCreate(usbTask, "usb_task", DEFAULT_STACK_SIZE, NULL, 3, &hUsb);//priority 3
+    result = xTaskCreate(usbTask, "usb_task", DEFAULT_STACK_SIZE, NULL, 4, &hUsb);//priority 3
 
     if (result != pdPASS) {
         printf("usb task creation failed\n");
