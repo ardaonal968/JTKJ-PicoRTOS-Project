@@ -19,9 +19,18 @@
 // turn up for dot, turn down for dash, straight for space.
 // high light level for dot, dim light level for space, low light level for dash.
 
+// Function delegation
+// Arda: read_light_sensor, receive_message, morse_code_light, morse_code_buzzer, display_task
+// Iivari:read_orientation, read_sensor, read_button, 
 
 
-//Add here necessary states
+//// Machine works by having two state machines, one for recieving the messages from the workstation (upper_state), 
+//// and one for sending messages (lower_state). The workload was mostly divided into lower state for Iivari and
+//// upper for Arda, but both parties worked on both. 
+
+
+///Lower state only activates when the upper state machine is in MENU_SEND.
+
 enum state {WAITING=1, WRITE_TO_MEMORY=2, SEND_MESSAGE=3, UPPER_IDLE=4, UPPER_PROCESSING=5, MENU_IDLE, MENU_SEND, MENU_RECEIVE, MENU_SEND_DEVICE_SELECT };
 enum state lower_state = WAITING;
 enum state upper_state = UPPER_IDLE;
@@ -43,14 +52,10 @@ int morse_index = 0;
 float gyroscope_data[10];
 int gyroscope_data_index = 0;
 
-int16_t sample_buffer[MEMS_BUFFER_SIZE];
-
-int16_t temp_sample_buffer[MEMS_BUFFER_SIZE];//use to have two different buffers.z
-
 volatile int samples_read = 0;
 
 
-uint32_t read_light_sensor() {
+uint32_t read_light_sensor() { //made by Arda, reads light sensor
 
     uint8_t txBuffer[1] = {VEML6030_ALS_REG};
     uint8_t rxBuffer[2] = {0, 0};
@@ -90,7 +95,7 @@ uint32_t read_light_sensor() {
 }
 
 
-static void read_orientation() {
+static void read_orientation() { /// made by iivari, used to read the current orientation of the device. 
     float ax, ay, az, gx, gy, gz, t;
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     { 
@@ -109,7 +114,7 @@ static void read_orientation() {
 
 
 
-static void read_sensor(void *arg) {
+static void read_sensor(void *arg) {  ///Made by iivari, a switch case to swap between the different types of sensors that then produce the morse code
     (void) arg;
     
     while(1) {
@@ -133,7 +138,7 @@ static void read_sensor(void *arg) {
         vTaskDelay(pdMS_TO_TICKS(100));   
         }}
 
-static void read_button(void *arg) {
+static void read_button(void *arg) { 
     (void) arg;
     while (1) {
         if (lower_state == WRITE_TO_MEMORY) {
@@ -142,7 +147,7 @@ static void read_button(void *arg) {
                 if (current_morse != '\0' && morse_index < 257) 
                 {
                     morse_message[morse_index++] = current_morse;
-                    morse_message[morse_index] = '\0'; /// 
+                    morse_message[morse_index] = '\0'; 
                 }
             }
             
@@ -279,7 +284,7 @@ void morse_code_buzzer(char*morse_code){//turn received more code into buzzer so
     }
 }
 
-static void display_task(void *arg) {
+static void display_task(void *arg) { 
     // LCD display configuration //
     (void)arg;
 
@@ -411,7 +416,7 @@ static void display_task(void *arg) {
         button_pressed_1 = 0;// When there is a state transition, reset buttons
         button_pressed_2 = 0;
         clear_display();
-        switch (upper_state) {
+        switch (upper_state) {  /// swaps between the different screens of the lcd based on the current position of the upper state machine
             case MENU_IDLE:
                 write_text_xy(40,0,"Welcome!");
                 write_text_xy(0,10, "1:Send a Message");
@@ -441,7 +446,7 @@ static void display_task(void *arg) {
                 write_text_xy(0,0,"Processing");
                 break;
         }
-        last_state = upper_state;
+        last_state = upper_state; /// puts into memory the last state, so that we dont keep updating the screen, see "if (upper_state != last_state)"
     }
     else if (upper_state == MENU_SEND)
     // screen only updates if we are in MENU_SEND, so that there is real time displayment of the morse message
