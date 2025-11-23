@@ -27,7 +27,7 @@ enum state lower_state = WAITING;
 enum state upper_state = UPPER_IDLE;
 char received_morse_code[256] = {0};//buffer to store 
 bool message_received = false;
-int receive_index = 0;
+int receive_number = 0;// tracks index to increment positions in receive_morse
 static volatile uint8_t button_pressed_1, button_pressed_2, ignore_buttons=false;
 
 float light_lux=0;
@@ -51,10 +51,13 @@ volatile int samples_read = 0;
 
 
 uint32_t read_light_sensor() {
+
     uint8_t txBuffer[1] = {VEML6030_ALS_REG};
     uint8_t rxBuffer[2] = {0, 0};
+
     float luxVal_uncorrected = 0;
     float luxVal =0;
+
     if (i2c_write_blocking(i2c_default, VEML6030_I2C_ADDR, txBuffer, 1, true) >= 0) {
         if (i2c_read_blocking(i2c_default, VEML6030_I2C_ADDR, rxBuffer, 2, false) >= 0) {
 
@@ -78,11 +81,10 @@ uint32_t read_light_sensor() {
     // Set current_morse based on lux thresholds
     light_lux = (uint32_t)luxVal;
 
-    if (luxVal > 150) current_morse = '.';
-    else if (luxVal < 10) current_morse = '-';
-    else current_morse = ' ';
+    if (luxVal > 150) current_morse = '.'; // high level for dot
+    else if (luxVal < 10) current_morse = '-'; // low level for dash
+    else current_morse = ' '; // dim lighting for space
 
-    //printf("Lux: %lu | current_morse: %c\n", light_lux, current_morse);
 
     return (uint32_t)luxVal;
 }
@@ -92,7 +94,6 @@ static void read_orientation() {
     float ax, ay, az, gx, gy, gz, t;
     if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0)
     { 
-        //("ax: %f ay: %f az: %f others: %f %f %f\n", ax, ay, az,gx,gy,t);
         if (az >= 0.85){
             current_morse =  '.';
         }
@@ -109,7 +110,6 @@ static void read_orientation() {
 
 
 static void read_sensor(void *arg) {
-    //printf("read_sensor started %d\n", lower_state);
     (void) arg;
     
     while(1) {
@@ -185,22 +185,22 @@ static void receive_message(void *pvParameters) {
         
             char received_character = (char)getchar;
 
-            if (received_character != '\n' && receive_index < sizeof(received_morse_code) - 1) 
+            if (received_character != '\n' && receive_number < sizeof(received_morse_code) - 1) 
             // if received character isn't a newline, and there is space in the buffer
             {
-                received_morse_code[receive_index++] = received_character;}
+                received_morse_code[receive_number++] = received_character;}
+                // append the character to the received_morse_code, incremented by receive
 
 
             else if (received_character == '\n') {
                 
-                if (receive_index > 0) {// check for empty messages
-                    received_morse_code[receive_index] = '\0';
+                if (receive_number > 0){// check for empty messages
+                    received_morse_code[receive_number] = '\0';
                     message_received = true;// flag for display_task to work
-                    receive_index = 0;// reset index
+                    receive_number = 0;// reset index
                 }
             }
         }
-        
         vTaskDelay(pdMS_TO_TICKS(50));
 }}
 
@@ -311,9 +311,11 @@ static void display_task(void *arg) {
                 strcat(morse_message, "  \n");
                 // append two empty spaces and line break before sending, not sure if necessary?
                 printf("%s",morse_message);
+                clear_display();
+                write_text_xy(0,0,"Message Sent!");
+                buzzer_play_tone(500, 200);
+                vTaskDelay(pdMS_TO_TICKS(1000));
 
-                //tud_cdc_n_write(1, (uint8_t const *)morse_message, strlen(morse_message));
-                //tud_cdc_n_write_flush(1); 
 
                 memset(morse_message,0,sizeof(morse_message)); // taken from https://stackoverflow.com/questions/8107826/proper-way-to-empty-a-c-string, clears the string when we return to menu
 
@@ -359,7 +361,6 @@ static void display_task(void *arg) {
             }
             
             else if (button_pressed_2) {
-                //play_jingle(megalovania_notes,megalovania_durations);
                 upper_state = MENU_IDLE;
             }
             break;
@@ -370,8 +371,30 @@ static void display_task(void *arg) {
             vTaskDelay(pdMS_TO_TICKS(30));
             clear_display();
 
+            int len = strlen(received_morse_code);
+    
+            char line1[21] = {0};                            // logic to split the buffer into 4, done with help from ai model deepseek V3,
+            strncpy(line1, received_morse_code, 20);         // with prompt "what's a simple way to split my buffer into four lines so it doesn't exceed lcd line limits?",
+                                                             // given in tandem with my upper processing task and received morse code buffer
+            write_text_xy(0,10, line1);             
+
+            if (len > 20) {
+                char line2[21] = {0};
+                strncpy(line2, received_morse_code + 20, 20);
+                write_text_xy(0,20, line2);}
+
+            if (len > 40) {
+                char line3[21] = {0};
+                strncpy(line3, received_morse_code + 40, 20);
+                write_text_xy(0,30, line3);}
+
+            if (len > 60) {
+                char line4[21] = {0};
+                strncpy(line4, received_morse_code + 60, 20);
+                write_text_xy(0,40, line4);}
+
             // if len.received_morse_code > something : write writetext(a), writetext(b)
-            write_text_xy(0,10,received_morse_code);
+            // write_text_xy(0,10,received_morse_code);
             morse_code_buzzer(received_morse_code);
             morse_code_light(received_morse_code);
 
@@ -384,7 +407,7 @@ static void display_task(void *arg) {
     }
 
     if (upper_state != last_state) {
-        // Implemented because of problems regarding screen flickering
+        // Implemented because of problems regarding screen flickering, non looping iteration of the task
         button_pressed_1 = 0;// When there is a state transition, reset buttons
         button_pressed_2 = 0;
         clear_display();
@@ -398,12 +421,13 @@ static void display_task(void *arg) {
             case MENU_SEND:
                 
                 write_text_xy(40,0,"Send Mode");
-                //write_text_xy(0,10,morse_message);
                 write_text_xy(0,20,"2:Back to Menu");
                 write_text_xy(0,30,"1:Write Character");
                 break;
 
             case MENU_SEND_DEVICE_SELECT:
+                button_pressed_1 = 0;
+                button_pressed_2 = 0;
                 write_text_xy(0,0,"1:Light Sensor Mode");
                 write_text_xy(0,10,"2:IMU Mode");
                 break;
@@ -426,7 +450,7 @@ static void display_task(void *arg) {
     }
     
 
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 }
 
